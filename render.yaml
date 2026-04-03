@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: proofmode-api
+    runtime: docker
+    rootDir: api
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: proofmode-db
+          property: connectionString
+      - key: APP_SECRET
+        generateValue: true
+      - key: FERNET_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        value: https://proofmode-web.onrender.com
+      - key: COOKIE_SECURE
+        value: "true"
+
+  - type: web
+    name: proofmode-web
+    runtime: docker
+    rootDir: web
+    envVars:
+      - key: NEXT_PUBLIC_API_BASE
+        value: https://proofmode-api.onrender.com
+
+databases:
+  - name: proofmode-db
+    plan: basic-256mb
