@@ -36,7 +36,33 @@ type Guidance = {
   suggested_checkpoint_note: string;
 };
 
-const DEFAULT_FINAL_ANSWERS = {
+type Submission = {
+  id: string;
+  title: string;
+  assignment_mode: string;
+  course?: string | null;
+  assignment_prompt?: string | null;
+  due_at?: string | null;
+  essay_text?: string | null;
+  student_name?: string | null;
+  include_name_on_pdf?: boolean;
+  visibility: string;
+  share_enabled?: boolean;
+  share_token?: string | null;
+  answers?: {
+    biggest_change?: string;
+    most_helpful_input?: string;
+    instructor_context?: string;
+  } | null;
+};
+
+type FinalAnswers = {
+  biggest_change: string;
+  most_helpful_input: string;
+  instructor_context: string;
+};
+
+const DEFAULT_FINAL_ANSWERS: FinalAnswers = {
   biggest_change: "",
   most_helpful_input: "",
   instructor_context: "",
@@ -82,8 +108,16 @@ function daysBetweenNow(dateString?: string | null) {
   return Math.floor(ms / (1000 * 60 * 60 * 24));
 }
 
+function getErrorMessage(err: unknown, fallback: string) {
+  return err instanceof Error ? err.message : fallback;
+}
+
+function isUnauthorized(message: string) {
+  return /401|unauthorized/i.test(message);
+}
+
 export default function ProofPage({ params }: { params: { id: string } }) {
-  const [submission, setSubmission] = useState<any>(null);
+  const [submission, setSubmission] = useState<Submission | null>(null);
   const [summary, setSummary] = useState<EvidenceSummary | null>(null);
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
   const [guidance, setGuidance] = useState<Guidance | null>(null);
@@ -96,7 +130,7 @@ export default function ProofPage({ params }: { params: { id: string } }) {
   const [sourceTool, setSourceTool] = useState("google_docs");
   const [checkpointNote, setCheckpointNote] = useState("");
   const [momentAnswer, setMomentAnswer] = useState("");
-  const [finalAnswers, setFinalAnswers] = useState(DEFAULT_FINAL_ANSWERS);
+  const [finalAnswers, setFinalAnswers] = useState<FinalAnswers>(DEFAULT_FINAL_ANSWERS);
 
   const [saving, setSaving] = useState(false);
   const [capturing, setCapturing] = useState(false);
@@ -105,6 +139,13 @@ export default function ProofPage({ params }: { params: { id: string } }) {
 
   const pdfDownloadHref = useMemo(() => {
     return submission ? `${API}/v1/submissions/${submission.id}/pdf` : "#";
+  }, [submission]);
+
+  const shareUrl = useMemo(() => {
+    if (!submission?.share_enabled || !submission.share_token) return "";
+    const origin =
+      typeof window !== "undefined" ? window.location.origin : "https://app.proofmode.co";
+    return `${origin}/s/${submission.share_token}`;
   }, [submission]);
 
   const groupedCheckpoints = useMemo(() => groupCheckpointsByDay(checkpoints), [checkpoints]);
@@ -116,6 +157,7 @@ export default function ProofPage({ params }: { params: { id: string } }) {
 
   const nextStepText = useMemo(() => {
     const days = daysBetweenNow(summary?.last_checkpoint_at);
+
     if (summary?.checkpoint_count === 0) {
       return "After your first real writing session, paste the latest draft here and capture your first checkpoint.";
     }
@@ -131,44 +173,52 @@ export default function ProofPage({ params }: { params: { id: string } }) {
     return `It has been ${days} days since your last checkpoint. Reopen this proof after your next real writing session and capture the new version.`;
   }, [summary]);
 
-  async function loadAll() {
+  async function loadGuidance(currentDraft: string, quiet = false) {
     try {
-      const [subRes, summaryRes, checkpointsRes] = await Promise.all([
-        apiFetch(`/v1/submissions/${params.id}`),
-        apiFetch(`/v1/submissions/${params.id}/evidence-summary`),
-        apiFetch(`/v1/submissions/${params.id}/checkpoints`),
-      ]);
+      setRefreshingGuidance(true);
 
-      if (subRes.status === 401) {
+      const data = await apiFetch<Guidance>(
+        `/v1/submissions/${params.id}/guidance`,
+        {
+          method: "POST",
+          body: JSON.stringify({ current_draft: currentDraft }),
+        },
+        true
+      );
+
+      setGuidance(data);
+
+      if (!checkpointNote.trim() && data?.suggested_checkpoint_note) {
+        setCheckpointNote(data.suggested_checkpoint_note);
+      }
+    } catch (err) {
+      const message = getErrorMessage(err, "Could not refresh moment question.");
+
+      if (isUnauthorized(message)) {
         window.location.href = "/login";
         return;
       }
 
-      if (!subRes.ok) {
-        const data = await subRes.json().catch(() => ({}));
-        setMessage(data.detail || "Could not load proof.");
-        return;
-      }
+      setGuidance(null);
+      if (!quiet) setMessage(message);
+    } finally {
+      setRefreshingGuidance(false);
+    }
+  }
 
-      if (!summaryRes.ok) {
-        const data = await summaryRes.json().catch(() => ({}));
-        setMessage(data.detail || "Could not load evidence summary.");
-        return;
-      }
+  async function loadAll() {
+    try {
+      setMessage("");
 
-      if (!checkpointsRes.ok) {
-        const data = await checkpointsRes.json().catch(() => ({}));
-        setMessage(data.detail || "Could not load checkpoints.");
-        return;
-      }
-
-      const sub = await subRes.json();
-      const summaryData = await summaryRes.json();
-      const checkpointData = await checkpointsRes.json();
+      const [sub, summaryData, checkpointData] = await Promise.all([
+        apiFetch<Submission>(`/v1/submissions/${params.id}`),
+        apiFetch<EvidenceSummary>(`/v1/submissions/${params.id}/evidence-summary`),
+        apiFetch<Checkpoint[]>(`/v1/submissions/${params.id}/checkpoints`),
+      ]);
 
       setSubmission(sub);
       setSummary(summaryData);
-      setCheckpoints(checkpointData);
+      setCheckpoints(Array.isArray(checkpointData) ? checkpointData : []);
 
       setAssignmentPrompt(sub.assignment_prompt || "");
       setDueAt(sub.due_at ? new Date(sub.due_at).toISOString().slice(0, 16) : "");
@@ -182,43 +232,20 @@ export default function ProofPage({ params }: { params: { id: string } }) {
       });
 
       await loadGuidance(sub.essay_text || "", true);
-    } catch {
-      setMessage("Could not load this proof page.");
-    }
-  }
+    } catch (err) {
+      const message = getErrorMessage(err, "Could not load this proof page.");
 
-  async function loadGuidance(currentDraft: string, quiet = false) {
-    try {
-      setRefreshingGuidance(true);
-
-      const res = await apiFetch(`/v1/submissions/${params.id}/guidance`, {
-        method: "POST",
-        body: JSON.stringify({ current_draft: currentDraft }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setGuidance(null);
-        if (!quiet) setMessage(data.detail || "Could not load guidance.");
+      if (isUnauthorized(message)) {
+        window.location.href = "/login";
         return;
       }
 
-      const data = await res.json();
-      setGuidance(data);
-
-      if (!checkpointNote.trim() && data?.suggested_checkpoint_note) {
-        setCheckpointNote(data.suggested_checkpoint_note);
-      }
-    } catch {
-      setGuidance(null);
-      if (!quiet) setMessage("Could not refresh moment question.");
-    } finally {
-      setRefreshingGuidance(false);
+      setMessage(message);
     }
   }
 
   useEffect(() => {
-    seedCsrf();
+    seedCsrf().catch(() => {});
     loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id]);
@@ -230,38 +257,41 @@ export default function ProofPage({ params }: { params: { id: string } }) {
       setSaving(true);
       setMessage("Saving...");
 
-      const updateRes = await apiFetch(`/v1/submissions/${params.id}`, {
-        method: "PUT",
-        body: JSON.stringify({
-          assignment_prompt: assignmentPrompt,
-          due_at: dueAt ? new Date(dueAt).toISOString() : null,
-          essay_text: essayText,
-          student_name: studentName,
-          include_name_on_pdf: includeNameOnPdf,
-        }),
-      });
+      await apiFetch(
+        `/v1/submissions/${params.id}`,
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            assignment_prompt: assignmentPrompt,
+            due_at: dueAt ? new Date(dueAt).toISOString() : null,
+            essay_text: essayText,
+            student_name: studentName,
+            include_name_on_pdf: includeNameOnPdf,
+          }),
+        },
+        true
+      );
 
-      if (!updateRes.ok) {
-        const data = await updateRes.json().catch(() => ({}));
-        setMessage(data.detail || "Could not save proof.");
-        return;
-      }
-
-      const answersRes = await apiFetch(`/v1/submissions/${params.id}/answers`, {
-        method: "PUT",
-        body: JSON.stringify({ answers: finalAnswers }),
-      });
-
-      if (!answersRes.ok) {
-        const data = await answersRes.json().catch(() => ({}));
-        setMessage(data.detail || "Could not save export notes.");
-        return;
-      }
+      await apiFetch(
+        `/v1/submissions/${params.id}/answers`,
+        {
+          method: "PUT",
+          body: JSON.stringify({ answers: finalAnswers }),
+        },
+        true
+      );
 
       await loadAll();
       setMessage("Saved.");
-    } catch {
-      setMessage("Could not save proof.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Could not save proof.");
+
+      if (isUnauthorized(message)) {
+        window.location.href = "/login";
+        return;
+      }
+
+      setMessage(message);
     } finally {
       setSaving(false);
     }
@@ -277,45 +307,48 @@ export default function ProofPage({ params }: { params: { id: string } }) {
       setCapturing(true);
       setMessage("Capturing checkpoint...");
 
-      const updateRes = await apiFetch(`/v1/submissions/${params.id}`, {
-        method: "PUT",
-        body: JSON.stringify({
-          assignment_prompt: assignmentPrompt,
-          due_at: dueAt ? new Date(dueAt).toISOString() : null,
-          essay_text: essayText,
-          student_name: studentName,
-          include_name_on_pdf: includeNameOnPdf,
-        }),
-      });
+      await apiFetch(
+        `/v1/submissions/${params.id}`,
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            assignment_prompt: assignmentPrompt,
+            due_at: dueAt ? new Date(dueAt).toISOString() : null,
+            essay_text: essayText,
+            student_name: studentName,
+            include_name_on_pdf: includeNameOnPdf,
+          }),
+        },
+        true
+      );
 
-      if (!updateRes.ok) {
-        const data = await updateRes.json().catch(() => ({}));
-        setMessage(data.detail || "Could not save draft before checkpoint.");
-        return;
-      }
-
-      const res = await apiFetch(`/v1/submissions/${params.id}/checkpoints`, {
-        method: "POST",
-        body: JSON.stringify({
-          source_tool: sourceTool,
-          draft_text: essayText,
-          note: checkpointNote,
-          moment_answer: momentAnswer,
-        }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setMessage(data.detail || "Could not capture checkpoint.");
-        return;
-      }
+      await apiFetch(
+        `/v1/submissions/${params.id}/checkpoints`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            source_tool: sourceTool,
+            draft_text: essayText,
+            note: checkpointNote,
+            moment_answer: momentAnswer,
+          }),
+        },
+        true
+      );
 
       setMomentAnswer("");
       setCheckpointNote("");
       await loadAll();
       setMessage("Checkpoint captured.");
-    } catch {
-      setMessage("Could not capture checkpoint.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Could not capture checkpoint.");
+
+      if (isUnauthorized(message)) {
+        window.location.href = "/login";
+        return;
+      }
+
+      setMessage(message);
     } finally {
       setCapturing(false);
     }
@@ -323,22 +356,26 @@ export default function ProofPage({ params }: { params: { id: string } }) {
 
   async function setVisibility(visibility: string) {
     try {
-      const res = await apiFetch(`/v1/submissions/${params.id}/share`, {
-        method: "POST",
-        body: JSON.stringify({ visibility }),
-      });
+      const updated = await apiFetch<Submission>(
+        `/v1/submissions/${params.id}/share`,
+        {
+          method: "POST",
+          body: JSON.stringify({ visibility }),
+        },
+        true
+      );
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setMessage(data.detail || "Could not update sharing.");
+      setSubmission(updated);
+      setMessage("Sharing updated.");
+    } catch (err) {
+      const message = getErrorMessage(err, "Could not update sharing.");
+
+      if (isUnauthorized(message)) {
+        window.location.href = "/login";
         return;
       }
 
-      const updated = await res.json();
-      setSubmission(updated);
-      setMessage("Sharing updated.");
-    } catch {
-      setMessage("Could not update sharing.");
+      setMessage(message);
     }
   }
 
@@ -686,11 +723,7 @@ export default function ProofPage({ params }: { params: { id: string } }) {
             {submission.share_enabled && submission.share_token && (
               <div>
                 <label>Shared URL</label>
-                <input
-                  className="copy-field"
-                  value={`${window.location.origin}/s/${submission.share_token}`}
-                  readOnly
-                />
+                <input className="copy-field" value={shareUrl} readOnly />
               </div>
             )}
           </div>
