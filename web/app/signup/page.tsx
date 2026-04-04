@@ -1,113 +1,70 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { apiFetch, seedCsrf } from "../../lib/api";
-
-const MIN_PASSWORD_LENGTH = 10;
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { registerUser } from "@/lib/api";
 
 export default function SignupPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [consent, setConsent] = useState(true);
+  const [agree, setAgree] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    seedCsrf();
-  }, []);
-
-  const canSubmit = useMemo(() => {
-    return Boolean(email.trim()) && password.length >= MIN_PASSWORD_LENGTH && consent && !submitting;
-  }, [email, password, consent, submitting]);
-
-  async function onSubmit(e: React.FormEvent) {
+  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
 
-    if (password.length < MIN_PASSWORD_LENGTH) {
-      setError("Password must be at least 10 characters.");
+    if (!agree) {
+      setError("You must agree to the privacy notice.");
       return;
     }
 
     try {
-      setSubmitting(true);
-
-      const res = await apiFetch("/v1/auth/register", {
-        method: "POST",
-        body: JSON.stringify({
-          email,
-          password,
-          consent_version: "v1",
-        }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-
-        if (res.status === 403) {
-          setError("Your session security check expired. Refresh the page and try again.");
-          return;
-        }
-
-        if (res.status === 422) {
-          setError("Password must be at least 10 characters.");
-          return;
-        }
-
-        setError(data.detail || "Could not create account.");
-        return;
+      setLoading(true);
+      await registerUser(email.trim(), password);
+      router.push("/dashboard");
+      router.refresh();
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Unable to create account.";
+      if (/csrf/i.test(message)) {
+        setError("Your session security check expired. Refresh the page and try again.");
+      } else {
+        setError(message);
       }
-
-      window.location.href = "/dashboard";
-    } catch {
-      setError("Could not reach the server.");
     } finally {
-      setSubmitting(false);
+      setLoading(false);
     }
   }
 
   return (
-    <main className="shell">
-      <div className="card" style={{ maxWidth: 720, margin: "40px auto" }}>
-        <h2>Create account</h2>
-        <form className="stack" onSubmit={onSubmit}>
-          <div>
-            <label>Email</label>
-            <input
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </div>
-
-          <div>
-            <label>Password</label>
-            <input
-              type="password"
-              autoComplete="new-password"
-              value={password}
-              minLength={MIN_PASSWORD_LENGTH}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </div>
-
-          <label>
-            <input
-              type="checkbox"
-              checked={consent}
-              onChange={(e) => setConsent(e.target.checked)}
-            />
-            I understand this is a pilot and agree to the privacy notice.
-          </label>
-
-          {error && <p className="field-error">{error}</p>}
-
-          <button type="submit" disabled={!canSubmit}>
-            {submitting ? "Creating account..." : "Create account"}
-          </button>
-        </form>
-      </div>
-    </main>
+    <form onSubmit={onSubmit}>
+      {/* keep your existing UI */}
+      <input
+        type="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        autoComplete="email"
+        required
+      />
+      <input
+        type="password"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        autoComplete="new-password"
+        required
+      />
+      <input
+        type="checkbox"
+        checked={agree}
+        onChange={(e) => setAgree(e.target.checked)}
+      />
+      {error ? <p>{error}</p> : null}
+      <button type="submit" disabled={loading}>
+        {loading ? "Creating..." : "Create account"}
+      </button>
+    </form>
   );
 }
