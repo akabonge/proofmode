@@ -1,19 +1,29 @@
-const API_BASE =
+export const API =
   process.env.NEXT_PUBLIC_API_BASE?.replace(/\/+$/, "") ||
   "https://api.proofmode.co";
 
-type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+export const API_BASE = API;
+
+type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue };
 
 function getCookie(name: string): string | null {
   if (typeof document === "undefined") return null;
+
   const match = document.cookie.match(
     new RegExp("(^|;\\s*)" + name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "=([^;]*)")
   );
+
   return match ? decodeURIComponent(match[2]) : null;
 }
 
 async function fetchCsrfToken(): Promise<string> {
-  const res = await fetch(`${API_BASE}/v1/auth/csrf`, {
+  const res = await fetch(`${API}/v1/auth/csrf`, {
     method: "GET",
     credentials: "include",
     cache: "no-store",
@@ -25,7 +35,6 @@ async function fetchCsrfToken(): Promise<string> {
 
   const data = await res.json().catch(() => ({}));
 
-  // Prefer explicit JSON token if backend returns one.
   const tokenFromBody =
     data?.csrf_token ??
     data?.csrf ??
@@ -33,7 +42,6 @@ async function fetchCsrfToken(): Promise<string> {
     null;
 
   const tokenFromCookie = getCookie("pm_csrf");
-
   const token = tokenFromBody || tokenFromCookie;
 
   if (!token) {
@@ -66,7 +74,7 @@ async function apiRequest<T = unknown>(
     headers.set("X-CSRF-Token", csrfToken);
   }
 
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(`${API}${path}`, {
     ...init,
     method,
     headers,
@@ -76,76 +84,113 @@ async function apiRequest<T = unknown>(
 
   if (!res.ok) {
     let detail = `${res.status} ${res.statusText}`;
+
     try {
       const err = await res.json();
       if (err?.detail) detail = err.detail;
     } catch {
       // ignore JSON parse failures
     }
+
     throw new Error(detail);
   }
 
-  // Some endpoints may return empty bodies.
   const text = await res.text();
   return text ? (JSON.parse(text) as T) : ({} as T);
 }
 
 export async function registerUser(email: string, password: string) {
-  return apiRequest("/v1/auth/register", {
-    method: "POST",
-    body: JSON.stringify({ email, password }),
-  }, true);
+  return apiRequest(
+    "/v1/auth/register",
+    {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    },
+    true
+  );
 }
 
 export async function loginUser(email: string, password: string) {
-  return apiRequest("/v1/auth/login", {
-    method: "POST",
-    body: JSON.stringify({ email, password }),
-  }, true);
+  return apiRequest(
+    "/v1/auth/login",
+    {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    },
+    true
+  );
 }
 
 export async function logoutUser() {
-  return apiRequest("/v1/auth/logout", {
-    method: "POST",
-  }, true);
+  return apiRequest(
+    "/v1/auth/logout",
+    {
+      method: "POST",
+    },
+    true
+  );
 }
 
 export async function getSession() {
-  return apiRequest("/v1/auth/me", {
-    method: "GET",
-  }, false);
+  return apiRequest(
+    "/v1/auth/me",
+    {
+      method: "GET",
+    },
+    false
+  );
 }
 
 export async function createSubmission(payload: Record<string, JsonValue>) {
-  return apiRequest("/v1/submissions", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  }, true);
+  return apiRequest(
+    "/v1/submissions",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+    true
+  );
 }
 
 export async function updateSubmission(id: string, payload: Record<string, JsonValue>) {
-  return apiRequest(`/v1/submissions/${id}`, {
-    method: "PUT",
-    body: JSON.stringify(payload),
-  }, true);
+  return apiRequest(
+    `/v1/submissions/${id}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    },
+    true
+  );
 }
 
 export async function addCheckpoint(id: string, payload: Record<string, JsonValue>) {
-  return apiRequest(`/v1/submissions/${id}/checkpoints`, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  }, true);
+  return apiRequest(
+    `/v1/submissions/${id}/checkpoints`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+    true
+  );
 }
 
 export async function requestGuidance(id: string, payload: Record<string, JsonValue>) {
-  return apiRequest(`/v1/submissions/${id}/guidance`, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  }, true);
+  return apiRequest(
+    `/v1/submissions/${id}/guidance`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+    true
+  );
 }
 
 export async function createShareLink(id: string) {
-  return apiRequest(`/v1/submissions/${id}/share`, {
-    method: "POST",
-  }, true);
+  return apiRequest(
+    `/v1/submissions/${id}/share`,
+    {
+      method: "POST",
+    },
+    true
+  );
 }
