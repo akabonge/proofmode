@@ -51,7 +51,13 @@ async function fetchCsrfToken(): Promise<string> {
   return token;
 }
 
-async function apiRequest<T = unknown>(
+// Export this because other pages are importing it.
+export async function seedCsrf(): Promise<string> {
+  return fetchCsrfToken();
+}
+
+// Export this because other pages are importing it.
+export async function apiFetch<T = unknown>(
   path: string,
   init: RequestInit = {},
   requireCsrf: boolean = false
@@ -100,7 +106,7 @@ async function apiRequest<T = unknown>(
 }
 
 export async function registerUser(email: string, password: string) {
-  return apiRequest(
+  return apiFetch(
     "/v1/auth/register",
     {
       method: "POST",
@@ -111,7 +117,7 @@ export async function registerUser(email: string, password: string) {
 }
 
 export async function loginUser(email: string, password: string) {
-  return apiRequest(
+  return apiFetch(
     "/v1/auth/login",
     {
       method: "POST",
@@ -122,7 +128,7 @@ export async function loginUser(email: string, password: string) {
 }
 
 export async function logoutUser() {
-  return apiRequest(
+  return apiFetch(
     "/v1/auth/logout",
     {
       method: "POST",
@@ -132,7 +138,7 @@ export async function logoutUser() {
 }
 
 export async function getSession() {
-  return apiRequest(
+  return apiFetch(
     "/v1/auth/me",
     {
       method: "GET",
@@ -142,7 +148,7 @@ export async function getSession() {
 }
 
 export async function createSubmission(payload: Record<string, JsonValue>) {
-  return apiRequest(
+  return apiFetch(
     "/v1/submissions",
     {
       method: "POST",
@@ -153,7 +159,7 @@ export async function createSubmission(payload: Record<string, JsonValue>) {
 }
 
 export async function updateSubmission(id: string, payload: Record<string, JsonValue>) {
-  return apiRequest(
+  return apiFetch(
     `/v1/submissions/${id}`,
     {
       method: "PUT",
@@ -164,7 +170,7 @@ export async function updateSubmission(id: string, payload: Record<string, JsonV
 }
 
 export async function addCheckpoint(id: string, payload: Record<string, JsonValue>) {
-  return apiRequest(
+  return apiFetch(
     `/v1/submissions/${id}/checkpoints`,
     {
       method: "POST",
@@ -175,7 +181,7 @@ export async function addCheckpoint(id: string, payload: Record<string, JsonValu
 }
 
 export async function requestGuidance(id: string, payload: Record<string, JsonValue>) {
-  return apiRequest(
+  return apiFetch(
     `/v1/submissions/${id}/guidance`,
     {
       method: "POST",
@@ -186,7 +192,7 @@ export async function requestGuidance(id: string, payload: Record<string, JsonVa
 }
 
 export async function createShareLink(id: string) {
-  return apiRequest(
+  return apiFetch(
     `/v1/submissions/${id}/share`,
     {
       method: "POST",
