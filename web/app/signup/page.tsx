@@ -6,6 +6,7 @@ import { registerUser } from "@/lib/api";
 
 export default function SignupPage() {
   const router = useRouter();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [agree, setAgree] = useState(false);
@@ -29,6 +30,7 @@ export default function SignupPage() {
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Unable to create account.";
+
       if (/csrf/i.test(message)) {
         setError("Your session security check expired. Refresh the page and try again.");
       } else {
@@ -40,31 +42,59 @@ export default function SignupPage() {
   }
 
   return (
-    <form onSubmit={onSubmit}>
-      {/* keep your existing UI */}
-      <input
-        type="email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        autoComplete="email"
-        required
-      />
-      <input
-        type="password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        autoComplete="new-password"
-        required
-      />
-      <input
-        type="checkbox"
-        checked={agree}
-        onChange={(e) => setAgree(e.target.checked)}
-      />
-      {error ? <p>{error}</p> : null}
-      <button type="submit" disabled={loading}>
-        {loading ? "Creating..." : "Create account"}
-      </button>
-    </form>
+    <main className="shell">
+      <div className="card" style={{ maxWidth: 860, margin: "40px auto" }}>
+        <h2>Create account</h2>
+        <p className="muted">
+          Start a secure ProofMode account to capture writing checkpoints over time.
+        </p>
+
+        <form className="stack spaced-lg" onSubmit={onSubmit}>
+          <div>
+            <label>Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
+              placeholder="you@example.com"
+              required
+            />
+          </div>
+
+          <div>
+            <label>Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="new-password"
+              placeholder="Create a password"
+              required
+            />
+          </div>
+
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={agree}
+              onChange={(e) => setAgree(e.target.checked)}
+            />
+            <span>I understand this is a pilot and agree to the privacy notice.</span>
+          </label>
+
+          {error && <p className="field-error">{error}</p>}
+
+          <div className="toolbar">
+            <button type="submit" disabled={loading}>
+              {loading ? "Creating..." : "Create account"}
+            </button>
+            <a className="btn secondary" href="/login">
+              Already have an account?
+            </a>
+          </div>
+        </form>
+      </div>
+    </main>
   );
 }
