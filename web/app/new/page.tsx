@@ -1,7 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { apiFetch, seedCsrf } from "../../lib/api";
+import { createSubmission } from "../../lib/api";
+
+type CreatedSubmission = {
+  id: string;
+};
 
 export default function NewProofPage() {
   const [title, setTitle] = useState("");
@@ -18,29 +22,31 @@ export default function NewProofPage() {
 
     try {
       setSubmitting(true);
-      await seedCsrf();
 
-      const res = await apiFetch("/v1/submissions", {
-        method: "POST",
-        body: JSON.stringify({
-          title: title || "Untitled",
-          course: course || null,
-          assignment_type: assignmentType,
-          assignment_prompt: assignmentPrompt || null,
-          due_at: dueAt ? new Date(dueAt).toISOString() : null,
-        }),
-      });
+      const created = (await createSubmission({
+        title: title || "Untitled",
+        course: course || null,
+        assignment_type: assignmentType,
+        assignment_prompt: assignmentPrompt || null,
+        due_at: dueAt ? new Date(dueAt).toISOString() : null,
+      })) as CreatedSubmission;
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setError(data.detail || "Could not create proof.");
+      if (created?.id) {
+        window.location.href = `/p/${created.id}`;
         return;
       }
 
-      const created = await res.json();
-      window.location.href = `/p/${created.id}`;
-    } catch {
-      setError("Could not reach the server.");
+      window.location.href = "/dashboard";
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Could not create proof.";
+
+      if (/401|unauthorized/i.test(message)) {
+        window.location.href = "/login";
+        return;
+      }
+
+      setError(message);
     } finally {
       setSubmitting(false);
     }
