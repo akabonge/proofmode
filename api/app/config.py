@@ -6,8 +6,10 @@ class Settings(BaseSettings):
     fernet_key: str
     cors_origins: str = "http://localhost:3000"
     cookie_secure: bool = False
+    cookie_domain: str | None = None
     session_cookie_name: str = "pm_session"
     csrf_cookie_name: str = "pm_csrf"
+    cookie_domain: str | None = None
     token_ttl_minutes: int = 60 * 12
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
