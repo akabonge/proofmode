@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createSubmission } from "../../lib/api";
+import { trackEvent } from "@/lib/analytics";
 
 type CreatedSubmission = {
   id: string;
@@ -15,6 +16,10 @@ export default function NewProofPage() {
   const [dueAt, setDueAt] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    trackEvent("new_proof_started", { path: "/new" });
+  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -30,6 +35,15 @@ export default function NewProofPage() {
         assignment_prompt: assignmentPrompt || null,
         due_at: dueAt ? new Date(dueAt).toISOString() : null,
       })) as CreatedSubmission;
+
+      await trackEvent("submission_created", {
+        path: "/new",
+        metadata: {
+          assignment_type: assignmentType,
+          has_course: Boolean(course.trim()),
+          has_due_date: Boolean(dueAt),
+        },
+      });
 
       if (created?.id) {
         window.location.href = `/p/${created.id}`;

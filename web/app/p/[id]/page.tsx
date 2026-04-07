@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { API, apiFetch, seedCsrf } from "../../../lib/api";
+import { trackEvent } from "../../../lib/analytics";
 
 type Checkpoint = {
   id: string;
@@ -247,6 +248,7 @@ export default function ProofPage({ params }: { params: { id: string } }) {
   useEffect(() => {
     seedCsrf().catch(() => {});
     loadAll();
+    trackEvent("proof_opened", { path: `/p/${params.id}` });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id]);
 
@@ -336,6 +338,15 @@ export default function ProofPage({ params }: { params: { id: string } }) {
         true
       );
 
+      await trackEvent("checkpoint_captured", {
+        path: `/p/${params.id}`,
+        metadata: {
+          source_tool: sourceTool,
+          has_note: Boolean(checkpointNote.trim()),
+          has_moment_answer: Boolean(momentAnswer.trim()),
+        },
+      });
+
       setMomentAnswer("");
       setCheckpointNote("");
       await loadAll();
@@ -366,6 +377,10 @@ export default function ProofPage({ params }: { params: { id: string } }) {
       );
 
       setSubmission(updated);
+      await trackEvent("proof_shared", {
+        path: `/p/${params.id}`,
+        metadata: { visibility },
+      });
       setMessage("Sharing updated.");
     } catch (err) {
       const message = getErrorMessage(err, "Could not update sharing.");

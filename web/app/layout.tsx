@@ -1,4 +1,5 @@
 import "./globals.css";
+import AnalyticsTracker from "./analytics-tracker";
 
 export const metadata = {
   title: "ProofMode",
@@ -12,7 +13,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <AnalyticsTracker />
+        {children}
+      </body>
     </html>
   );
 }

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { loginUser } from "@/lib/api";
+import { trackEvent } from "@/lib/analytics";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -19,6 +20,10 @@ export default function LoginPage() {
     try {
       setLoading(true);
       await loginUser(email.trim(), password);
+      await trackEvent("login_completed", {
+        path: "/login",
+        metadata: { email_domain: email.trim().split("@")[1] || "unknown" },
+      });
       router.push("/dashboard");
       router.refresh();
     } catch (err) {

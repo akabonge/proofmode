@@ -603,3 +603,122 @@ select {
   color: #dfe5ff;
   padding: 6px 2px 0;
 }
+
+.admin-row {
+  align-items: stretch;
+}
+
+.admin-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.admin-stat-card {
+  border: 1px solid rgba(149, 166, 255, 0.14);
+  background:
+    linear-gradient(180deg, rgba(14, 25, 57, 0.92), rgba(8, 16, 39, 0.96)),
+    radial-gradient(circle at top right, rgba(108, 120, 255, 0.18), transparent 45%);
+  border-radius: 20px;
+  padding: 18px;
+}
+
+.admin-stat-label {
+  color: var(--muted);
+  font-size: 0.92rem;
+  margin-bottom: 8px;
+}
+
+.admin-stat-value {
+  font-size: clamp(1.9rem, 3vw, 2.8rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  margin-bottom: 4px;
+}
+
+.admin-inline-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.analytics-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.analytics-row {
+  border: 1px solid rgba(149, 166, 255, 0.12);
+  background: rgba(9, 17, 42, 0.7);
+  border-radius: 18px;
+  padding: 14px 16px;
+}
+
+.analytics-row.compact {
+  padding: 12px 14px;
+}
+
+.analytics-row-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.analytics-bar-shell {
+  width: 100%;
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.analytics-bar-shell.tall {
+  height: 12px;
+}
+
+.analytics-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #62e1ff 0%, #7c83ff 52%, #a3b1ff 100%);
+  min-width: 10px;
+}
+
+.daily-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.daily-card {
+  border: 1px solid rgba(149, 166, 255, 0.12);
+  background: rgba(9, 17, 42, 0.7);
+  border-radius: 18px;
+  padding: 14px 16px;
+}
+
+.daily-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.daily-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+@media (max-width: 980px) {
+  .admin-stat-grid,
+  .daily-grid {
+    grid-template-columns: 1fr;
+  }
+}

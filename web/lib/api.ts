@@ -147,6 +147,17 @@ export async function getSession() {
   );
 }
 
+export async function sendAnalyticsEvent(payload: Record<string, JsonValue>) {
+  return apiFetch(
+    "/v1/analytics/events",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+    true
+  );
+}
+
 export async function createSubmission(payload: Record<string, JsonValue>) {
   return apiFetch(
     "/v1/submissions",

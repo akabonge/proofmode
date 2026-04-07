@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { registerUser } from "@/lib/api";
+import { trackEvent } from "@/lib/analytics";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -25,6 +26,10 @@ export default function SignupPage() {
     try {
       setLoading(true);
       await registerUser(email.trim(), password);
+      await trackEvent("signup_completed", {
+        path: "/signup",
+        metadata: { email_domain: email.trim().split("@")[1] || "unknown" },
+      });
       router.push("/dashboard");
       router.refresh();
     } catch (err) {

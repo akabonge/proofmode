@@ -129,3 +129,64 @@ class SubmissionOut(BaseModel):
 
 class HealthOut(BaseModel):
     status: str = "ok"
+
+
+class AnalyticsEventCreate(BaseModel):
+    event_name: str = Field(min_length=1, max_length=80)
+    path: Optional[str] = Field(default=None, max_length=255)
+    session_id: Optional[str] = Field(default=None, max_length=80)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class AnalyticsKpiOut(BaseModel):
+    total_users: int
+    new_users_7d: int
+    total_submissions: int
+    total_checkpoints: int
+    shared_proofs: int
+    total_events: int
+    unique_visitors_30d: int
+    active_writers_30d: int
+
+
+class AnalyticsFunnelStepOut(BaseModel):
+    label: str
+    value: int
+
+
+class AnalyticsDailyActivityOut(BaseModel):
+    date: str
+    page_views: int
+    signups: int
+    proofs_created: int
+    checkpoints_captured: int
+
+
+class AnalyticsPageViewOut(BaseModel):
+    path: str
+    views: int
+
+
+class AnalyticsAssignmentModeOut(BaseModel):
+    mode: str
+    count: int
+
+
+class AnalyticsRecentEventOut(BaseModel):
+    id: str
+    event_name: str
+    path: Optional[str]
+    created_at: datetime
+    user_email: Optional[EmailStr] = None
+    session_id: Optional[str] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class AnalyticsDashboardOut(BaseModel):
+    generated_at: datetime
+    kpis: AnalyticsKpiOut
+    funnel: list[AnalyticsFunnelStepOut]
+    daily_activity: list[AnalyticsDailyActivityOut]
+    top_pages: list[AnalyticsPageViewOut]
+    assignment_modes: list[AnalyticsAssignmentModeOut]
+    recent_events: list[AnalyticsRecentEventOut]

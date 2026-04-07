@@ -7,6 +7,7 @@ from .db import get_db
 from .models import User
 from .security import decode_session_token
 
+
 def get_current_user(
     session_token: str | None = Cookie(default=None, alias=settings.session_cookie_name),
     db: Session = Depends(get_db),
@@ -21,6 +22,26 @@ def get_current_user(
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     return user
+
+
+def get_optional_user(
+    session_token: str | None = Cookie(default=None, alias=settings.session_cookie_name),
+    db: Session = Depends(get_db),
+) -> User | None:
+    if not session_token:
+        return None
+    try:
+        payload = decode_session_token(session_token)
+    except jwt.PyJWTError:
+        return None
+    return db.get(User, payload["sub"])
+
+
+def require_admin(user: User = Depends(get_current_user)) -> User:
+    if user.role not in {"admin", "judge"}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+    return user
+
 
 def require_csrf(
     request: Request,
