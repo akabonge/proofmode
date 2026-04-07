@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     app_secret: str
     fernet_key: str
     cors_origins: str = "http://localhost:3000"
+    admin_emails: str = "takemedancing@gmail.com"
     cookie_secure: bool = False
     cookie_domain: str | None = None
     session_cookie_name: str = "pm_session"
