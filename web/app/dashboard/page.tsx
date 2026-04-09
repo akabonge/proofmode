@@ -73,10 +73,6 @@ function isAdminRole(role?: string) {
   return role === "admin" || role === "judge";
 }
 
-function isAdminEmail(email?: string) {
-  return (email || "").trim().toLowerCase() === "takemedancing@gmail.com";
-}
-
 function formatEventName(eventName: string) {
   return eventName
     .replace(/^page_view:/, "page view ")
@@ -324,9 +320,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const adminView = useMemo(() => {
-    return isAdminRole(user?.role) || isAdminEmail(user?.email);
-  }, [user?.email, user?.role]);
+  const adminView = useMemo(() => isAdminRole(user?.role), [user?.role]);
 
   useEffect(() => {
     let cancelled = false;
@@ -339,7 +333,7 @@ export default function DashboardPage() {
         setUser(session);
 
         const requests: Promise<unknown>[] = [apiFetch<Submission[]>("/v1/submissions")];
-        if (isAdminRole(session.role) || isAdminEmail(session.email)) {
+        if (isAdminRole(session.role)) {
           requests.push(apiFetch<AnalyticsDashboard>("/v1/admin/analytics"));
         }
 

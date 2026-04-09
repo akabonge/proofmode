@@ -8,18 +8,6 @@ from .models import User
 from .security import decode_session_token
 
 
-def is_admin_user(user: User | None) -> bool:
-    if not user:
-        return False
-
-    admin_emails = {
-        email.strip().lower()
-        for email in settings.admin_emails.split(",")
-        if email.strip()
-    }
-    return user.role in {"admin", "judge"} or user.email.lower() in admin_emails
-
-
 def get_current_user(
     session_token: str | None = Cookie(default=None, alias=settings.session_cookie_name),
     db: Session = Depends(get_db),
@@ -50,7 +38,7 @@ def get_optional_user(
 
 
 def require_admin(user: User = Depends(get_current_user)) -> User:
-    if not is_admin_user(user):
+    if user.role not in {"admin", "judge"}:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     return user
 
