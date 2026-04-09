@@ -2,6 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "../../../lib/api";
+import {
+  humanizeAssignmentMode,
+  humanizeEvidenceStrength,
+  humanizeSourceTool,
+} from "../../../lib/display";
 
 type SharedCheckpoint = {
   id: string;
@@ -145,10 +150,10 @@ export default function SharedProofPage({ params }: { params: { token: string } 
     <main className="shell">
       <div className="topnav">
         <div>
-          <h2 className="page-title">{proof.title || "Shared Proof"}</h2>
+          <h2 className="page-title">{proof.title || "Shared proof"}</h2>
           <div className="subtitle">
-            {proof.assignment_mode || "writing"}
-            {proof.course ? ` • ${proof.course}` : ""}
+            {humanizeAssignmentMode(proof.assignment_mode)}
+            {proof.course ? ` - ${proof.course}` : ""}
           </div>
         </div>
       </div>
@@ -237,7 +242,7 @@ export default function SharedProofPage({ params }: { params: { token: string } 
               <div className="status-row">
                 <span className="muted">Evidence strength:</span>
                 <span className="status-pill">
-                  {proof.summary.evidence_strength || "unknown"}
+                  {humanizeEvidenceStrength(proof.summary.evidence_strength)}
                 </span>
               </div>
 
@@ -271,7 +276,9 @@ export default function SharedProofPage({ params }: { params: { token: string } 
                               })}
                             </strong>
                             {checkpoint.source_tool ? (
-                              <span className="status-pill">{checkpoint.source_tool}</span>
+                              <span className="status-pill">
+                                {humanizeSourceTool(checkpoint.source_tool)}
+                              </span>
                             ) : null}
                           </div>
 

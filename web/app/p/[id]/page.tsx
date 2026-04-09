@@ -3,6 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { API, apiFetch, seedCsrf } from "../../../lib/api";
 import { trackEvent } from "../../../lib/analytics";
+import {
+  humanizeAssignmentMode,
+  humanizeChangeType,
+  humanizeEvidenceStrength,
+  humanizeSourceTool,
+  humanizeStage,
+  humanizeVisibility,
+} from "../../../lib/display";
 
 type Checkpoint = {
   id: string;
@@ -169,7 +177,7 @@ export default function ProofPage({ params }: { params: { id: string } }) {
       return "You already captured work today. Come back after your next writing session or when the draft materially changes.";
     }
     if (days === 1) {
-      return "It has been 1 day since your last checkpoint. Capture the next version after today’s writing session.";
+      return "It has been 1 day since your last checkpoint. Capture the next version after today's writing session.";
     }
     return `It has been ${days} days since your last checkpoint. Reopen this proof after your next real writing session and capture the new version.`;
   }, [summary]);
@@ -411,7 +419,8 @@ export default function ProofPage({ params }: { params: { id: string } }) {
         <div>
           <h2 className="page-title">{submission.title}</h2>
           <div className="subtitle">
-            {submission.assignment_mode} {submission.course ? `• ${submission.course}` : ""}
+            {humanizeAssignmentMode(submission.assignment_mode)}
+            {submission.course ? ` - ${submission.course}` : ""}
           </div>
         </div>
 
@@ -588,11 +597,11 @@ export default function ProofPage({ params }: { params: { id: string } }) {
             <div className="question-box">
               <div className="question-meta">
                 <span className="status-pill">
-                  {guidance?.assignment_mode || submission.assignment_mode}
+                  {humanizeAssignmentMode(guidance?.assignment_mode || submission.assignment_mode)}
                 </span>
-                <span className="status-pill">{guidance?.stage || "starting"}</span>
+                <span className="status-pill">{humanizeStage(guidance?.stage || "starting")}</span>
                 <span className="status-pill">
-                  {guidance?.detected_change || "first_capture"}
+                  {humanizeChangeType(guidance?.detected_change || "first_capture")}
                 </span>
               </div>
 
@@ -647,7 +656,9 @@ export default function ProofPage({ params }: { params: { id: string } }) {
 
             <div className="status-row">
               <span className="muted">Evidence strength:</span>
-              <span className="status-pill">{summary.evidence_strength}</span>
+              <span className="status-pill">
+                {humanizeEvidenceStrength(summary.evidence_strength)}
+              </span>
             </div>
 
             <p className="muted small">
@@ -679,7 +690,9 @@ export default function ProofPage({ params }: { params: { id: string } }) {
                                 minute: "2-digit",
                               })}
                             </strong>
-                            <span className="status-pill">{checkpoint.source_tool}</span>
+                            <span className="status-pill">
+                              {humanizeSourceTool(checkpoint.source_tool)}
+                            </span>
                           </div>
 
                           <div className="chip-row">
@@ -732,7 +745,7 @@ export default function ProofPage({ params }: { params: { id: string } }) {
 
             <div className="status-row">
               <span className="muted">Visibility:</span>
-              <span className="status-pill">{submission.visibility}</span>
+              <span className="status-pill">{humanizeVisibility(submission.visibility)}</span>
             </div>
 
             {submission.share_enabled && submission.share_token && (

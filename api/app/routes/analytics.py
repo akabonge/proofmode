@@ -1,5 +1,4 @@
 import json
-from collections import Counter
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends
@@ -58,6 +57,16 @@ def get_admin_analytics(
     total_checkpoints = db.query(func.count(SubmissionCheckpoint.id)).scalar() or 0
     shared_proofs = db.query(func.count(Submission.id)).filter(Submission.share_enabled == True).scalar() or 0
     total_events = db.query(func.count(AnalyticsEvent.id)).scalar() or 0
+    recent_signups_30d = db.query(func.count(User.id)).filter(User.created_at >= thirty_days_ago).scalar() or 0
+    recent_submissions_30d = (
+        db.query(func.count(Submission.id)).filter(Submission.created_at >= thirty_days_ago).scalar() or 0
+    )
+    recent_checkpoints_30d = (
+        db.query(func.count(SubmissionCheckpoint.id))
+        .filter(SubmissionCheckpoint.created_at >= thirty_days_ago)
+        .scalar()
+        or 0
+    )
 
     recent_visitor_ids = {
         session_id
@@ -91,23 +100,33 @@ def get_admin_analytics(
         if owner_id
     }
 
-    event_counts = {
+    recent_event_counts = {
         name: count
         for name, count in (
             db.query(AnalyticsEvent.event_name, func.count(AnalyticsEvent.id))
+            .filter(AnalyticsEvent.created_at >= thirty_days_ago)
             .group_by(AnalyticsEvent.event_name)
             .all()
         )
     }
 
     funnel = [
-        AnalyticsFunnelStepOut(label="Landing page views", value=event_counts.get("page_view:/", 0)),
-        AnalyticsFunnelStepOut(label="Signup page views", value=event_counts.get("page_view:/signup", 0)),
-        AnalyticsFunnelStepOut(label="Accounts created", value=event_counts.get("signup_completed", 0)),
-        AnalyticsFunnelStepOut(label="Dashboard visits", value=event_counts.get("page_view:/dashboard", 0)),
-        AnalyticsFunnelStepOut(label="Proofs created", value=event_counts.get("submission_created", 0)),
-        AnalyticsFunnelStepOut(label="Checkpoints captured", value=event_counts.get("checkpoint_captured", 0)),
-        AnalyticsFunnelStepOut(label="Proofs shared", value=event_counts.get("proof_shared", 0)),
+        AnalyticsFunnelStepOut(label="Landing page visits", value=recent_event_counts.get("page_view:/", 0)),
+        AnalyticsFunnelStepOut(label="Sign-up page visits", value=recent_event_counts.get("page_view:/signup", 0)),
+        AnalyticsFunnelStepOut(
+            label="Accounts created",
+            value=max(recent_event_counts.get("signup_completed", 0), recent_signups_30d),
+        ),
+        AnalyticsFunnelStepOut(label="Dashboard visits", value=recent_event_counts.get("page_view:/dashboard", 0)),
+        AnalyticsFunnelStepOut(
+            label="Proofs created",
+            value=max(recent_event_counts.get("submission_created", 0), recent_submissions_30d),
+        ),
+        AnalyticsFunnelStepOut(
+            label="Checkpoints captured",
+            value=max(recent_event_counts.get("checkpoint_captured", 0), recent_checkpoints_30d),
+        ),
+        AnalyticsFunnelStepOut(label="Sharing actions", value=recent_event_counts.get("proof_shared", 0)),
     ]
 
     daily_buckets: dict[str, dict[str, int]] = {}
@@ -127,8 +146,46 @@ def get_admin_analytics(
         .order_by(AnalyticsEvent.created_at.desc())
         .all()
     )
+    recent_page_views = (
+        db.query(AnalyticsEvent.path, func.count(AnalyticsEvent.id))
+        .filter(
+            AnalyticsEvent.created_at >= thirty_days_ago,
+            AnalyticsEvent.event_name.like("page_view:%"),
+            AnalyticsEvent.path.isnot(None),
+        )
+        .group_by(AnalyticsEvent.path)
+        .order_by(func.count(AnalyticsEvent.id).desc())
+        .limit(8)
+        .all()
+    )
+    user_signups_14d = {
+        (day.isoformat() if hasattr(day, "isoformat") else str(day)): count
+        for day, count in (
+            db.query(func.date(User.created_at), func.count(User.id))
+            .filter(User.created_at >= fourteen_days_ago)
+            .group_by(func.date(User.created_at))
+            .all()
+        )
+    }
+    submission_creates_14d = {
+        (day.isoformat() if hasattr(day, "isoformat") else str(day)): count
+        for day, count in (
+            db.query(func.date(Submission.created_at), func.count(Submission.id))
+            .filter(Submission.created_at >= fourteen_days_ago)
+            .group_by(func.date(Submission.created_at))
+            .all()
+        )
+    }
+    checkpoint_creates_14d = {
+        (day.isoformat() if hasattr(day, "isoformat") else str(day)): count
+        for day, count in (
+            db.query(func.date(SubmissionCheckpoint.created_at), func.count(SubmissionCheckpoint.id))
+            .filter(SubmissionCheckpoint.created_at >= fourteen_days_ago)
+            .group_by(func.date(SubmissionCheckpoint.created_at))
+            .all()
+        )
+    }
 
-    page_counter: Counter[str] = Counter()
     recent_event_cards: list[AnalyticsRecentEventOut] = []
 
     for row, email in recent_events:
@@ -137,15 +194,6 @@ def get_admin_analytics(
         if bucket:
             if row.event_name.startswith("page_view:"):
                 bucket["page_views"] += 1
-            elif row.event_name == "signup_completed":
-                bucket["signups"] += 1
-            elif row.event_name == "submission_created":
-                bucket["proofs_created"] += 1
-            elif row.event_name == "checkpoint_captured":
-                bucket["checkpoints_captured"] += 1
-
-        if row.path:
-            page_counter[row.path] += 1
 
         if len(recent_event_cards) < 12:
             try:
@@ -164,6 +212,11 @@ def get_admin_analytics(
                 )
             )
 
+    for day_key, bucket in daily_buckets.items():
+        bucket["signups"] = int(user_signups_14d.get(day_key, 0))
+        bucket["proofs_created"] = int(submission_creates_14d.get(day_key, 0))
+        bucket["checkpoints_captured"] = int(checkpoint_creates_14d.get(day_key, 0))
+
     assignment_modes = [
         AnalyticsAssignmentModeOut(mode=mode or "unknown", count=count)
         for mode, count in (
@@ -177,7 +230,7 @@ def get_admin_analytics(
 
     top_pages = [
         AnalyticsPageViewOut(path=path, views=views)
-        for path, views in page_counter.most_common(8)
+        for path, views in recent_page_views
     ]
 
     return AnalyticsDashboardOut(

@@ -3,6 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { apiFetch, getSession } from "@/lib/api";
+import {
+  formatPercent,
+  humanizeAssignmentMode,
+  humanizeEventName,
+  humanizePath,
+  humanizeVisibility,
+} from "@/lib/display";
 
 type Submission = {
   id: string;
@@ -73,23 +80,20 @@ function isAdminRole(role?: string) {
   return role === "admin" || role === "judge";
 }
 
-function formatEventName(eventName: string) {
-  return eventName
-    .replace(/^page_view:/, "page view ")
-    .replace(/_/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function formatMode(mode: string) {
-  return mode.replace(/_/g, " ");
-}
-
 function formatShortDate(dateString: string) {
   return new Date(dateString).toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
   });
+}
+
+function formatMetadataKey(key: string) {
+  return key.replace(/_/g, " ");
+}
+
+function formatRole(role?: string) {
+  if (!role) return "";
+  return role.charAt(0).toUpperCase() + role.slice(1);
 }
 
 function AdminAnalyticsPanel({ analytics }: { analytics: AnalyticsDashboard }) {
@@ -100,26 +104,43 @@ function AdminAnalyticsPanel({ analytics }: { analytics: AnalyticsDashboard }) {
     ),
     1
   );
+  const totalAssignmentModes = analytics.assignment_modes.reduce((sum, mode) => sum + mode.count, 0) || 1;
 
-  const summaryCards = [
-    { label: "Total users", value: analytics.kpis.total_users, hint: `+${analytics.kpis.new_users_7d} this week` },
-    { label: "Unique visitors", value: analytics.kpis.unique_visitors_30d, hint: "last 30 days" },
-    { label: "Proofs created", value: analytics.kpis.total_submissions, hint: `${analytics.kpis.shared_proofs} shared` },
-    { label: "Checkpoints", value: analytics.kpis.total_checkpoints, hint: `${analytics.kpis.active_writers_30d} active writers` },
+  const executiveCards = [
+    {
+      label: "Active visitors",
+      value: analytics.kpis.unique_visitors_30d,
+      hint: "People who visited in the last 30 days",
+    },
+    {
+      label: "New accounts",
+      value: analytics.kpis.new_users_7d,
+      hint: "Created in the last 7 days",
+    },
+    {
+      label: "Proofs created",
+      value: analytics.kpis.total_submissions,
+      hint: `${analytics.kpis.shared_proofs} currently shared`,
+    },
+    {
+      label: "Checkpoints captured",
+      value: analytics.kpis.total_checkpoints,
+      hint: `${analytics.kpis.active_writers_30d} active writers in the last 30 days`,
+    },
   ];
 
   return (
     <div className="stack spaced-lg">
       <div className="card stack">
         <div className="badge">Admin analytics</div>
-        <h2>Pitch dashboard</h2>
+        <h2>Product health dashboard</h2>
         <p className="muted">
-          This is first-party product analytics from ProofMode itself: visits, signups, proof creation,
-          checkpoint capture, and sharing activity.
+          A first-party view of traction, engagement, and writing-process activity. This is designed
+          to answer the questions a judge, professor, or investor would ask in a quick walkthrough.
         </p>
 
         <div className="admin-stat-grid">
-          {summaryCards.map((card) => (
+          {executiveCards.map((card) => (
             <div key={card.label} className="admin-stat-card">
               <div className="admin-stat-label">{card.label}</div>
               <div className="admin-stat-value">{card.value}</div>
@@ -129,9 +150,10 @@ function AdminAnalyticsPanel({ analytics }: { analytics: AnalyticsDashboard }) {
         </div>
 
         <div className="admin-inline-meta">
-          <span className="status-pill">{analytics.kpis.total_events} tracked events</span>
+          <span className="status-pill">{analytics.kpis.total_users} total users</span>
+          <span className="status-pill">{analytics.kpis.total_events} tracked product events</span>
           <span className="status-pill">
-            Updated {new Date(analytics.generated_at).toLocaleString()}
+            Refreshed {new Date(analytics.generated_at).toLocaleString()}
           </span>
         </div>
       </div>
@@ -139,27 +161,53 @@ function AdminAnalyticsPanel({ analytics }: { analytics: AnalyticsDashboard }) {
       <div className="row admin-row">
         <div className="stack">
           <div className="card stack">
-            <h3>Adoption funnel</h3>
+            <div className="section-head">
+              <div>
+                <h3>Acquisition to activation</h3>
+                <p className="muted small">
+                  Last 30 days. This view is aligned to real product milestones instead of raw event names.
+                </p>
+              </div>
+            </div>
+
             <div className="analytics-list">
-              {analytics.funnel.map((step) => (
-                <div key={step.label} className="analytics-row">
-                  <div className="analytics-row-head">
-                    <span>{step.label}</span>
-                    <strong>{step.value}</strong>
+              {analytics.funnel.map((step, index) => {
+                const previous = index === 0 ? step.value : analytics.funnel[index - 1].value;
+                const conversion = previous > 0 ? (step.value / previous) * 100 : 0;
+
+                return (
+                  <div key={step.label} className="analytics-row">
+                    <div className="analytics-row-head">
+                      <span>{step.label}</span>
+                      <div className="analytics-row-value">
+                        <strong>{step.value}</strong>
+                        {index > 0 ? (
+                          <span className="analytics-rate">{formatPercent(conversion)}</span>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="analytics-bar-shell">
+                      <div
+                        className="analytics-bar-fill"
+                        style={{ width: `${(step.value / maxFunnel) * 100}%` }}
+                      />
+                    </div>
                   </div>
-                  <div className="analytics-bar-shell">
-                    <div
-                      className="analytics-bar-fill"
-                      style={{ width: `${(step.value / maxFunnel) * 100}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
           <div className="card stack">
-            <h3>Last 14 days</h3>
+            <div className="section-head">
+              <div>
+                <h3>Daily momentum</h3>
+                <p className="muted small">
+                  Last 14 days across visits, sign-ups, proof creation, and checkpoint capture.
+                </p>
+              </div>
+            </div>
+
             <div className="daily-grid">
               {analytics.daily_activity.map((day) => {
                 const total =
@@ -169,7 +217,7 @@ function AdminAnalyticsPanel({ analytics }: { analytics: AnalyticsDashboard }) {
                   <div key={day.date} className="daily-card">
                     <div className="daily-card-head">
                       <strong>{formatShortDate(day.date)}</strong>
-                      <span className="muted small">{total} actions</span>
+                      <span className="muted small">{total} tracked actions</span>
                     </div>
 
                     <div className="analytics-bar-shell tall">
@@ -180,10 +228,10 @@ function AdminAnalyticsPanel({ analytics }: { analytics: AnalyticsDashboard }) {
                     </div>
 
                     <div className="daily-metrics">
-                      <span>Views {day.page_views}</span>
-                      <span>Signups {day.signups}</span>
+                      <span>Visits {day.page_views}</span>
+                      <span>Sign-ups {day.signups}</span>
                       <span>Proofs {day.proofs_created}</span>
-                      <span>Checks {day.checkpoints_captured}</span>
+                      <span>Checkpoints {day.checkpoints_captured}</span>
                     </div>
                   </div>
                 );
@@ -194,7 +242,13 @@ function AdminAnalyticsPanel({ analytics }: { analytics: AnalyticsDashboard }) {
 
         <div className="stack">
           <div className="card stack">
-            <h3>Most visited pages</h3>
+            <div className="section-head">
+              <div>
+                <h3>Top product surfaces</h3>
+                <p className="muted small">Most visited pages in the last 30 days.</p>
+              </div>
+            </div>
+
             {analytics.top_pages.length === 0 ? (
               <p className="muted">No page view data yet.</p>
             ) : (
@@ -202,7 +256,10 @@ function AdminAnalyticsPanel({ analytics }: { analytics: AnalyticsDashboard }) {
                 {analytics.top_pages.map((page) => (
                   <div key={page.path} className="analytics-row compact">
                     <div className="analytics-row-head">
-                      <span>{page.path}</span>
+                      <div>
+                        <div>{humanizePath(page.path)}</div>
+                        <div className="muted small">{page.path}</div>
+                      </div>
                       <strong>{page.views}</strong>
                     </div>
                   </div>
@@ -212,16 +269,34 @@ function AdminAnalyticsPanel({ analytics }: { analytics: AnalyticsDashboard }) {
           </div>
 
           <div className="card stack">
-            <h3>Assignment mix</h3>
+            <div className="section-head">
+              <div>
+                <h3>What students are writing</h3>
+                <p className="muted small">Current assignment mix across created proofs.</p>
+              </div>
+            </div>
+
             {analytics.assignment_modes.length === 0 ? (
               <p className="muted">No proofs created yet.</p>
             ) : (
-              <div className="chip-row">
-                {analytics.assignment_modes.map((mode) => (
-                  <span key={mode.mode} className="chip">
-                    {formatMode(mode.mode)}: {mode.count}
-                  </span>
-                ))}
+              <div className="analytics-list">
+                {analytics.assignment_modes.map((mode) => {
+                  const share = (mode.count / totalAssignmentModes) * 100;
+                  return (
+                    <div key={mode.mode} className="analytics-row compact">
+                      <div className="analytics-row-head">
+                        <span>{humanizeAssignmentMode(mode.mode)}</span>
+                        <div className="analytics-row-value">
+                          <strong>{mode.count}</strong>
+                          <span className="analytics-rate">{formatPercent(share)}</span>
+                        </div>
+                      </div>
+                      <div className="analytics-bar-shell">
+                        <div className="analytics-bar-fill" style={{ width: `${share}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -229,7 +304,15 @@ function AdminAnalyticsPanel({ analytics }: { analytics: AnalyticsDashboard }) {
       </div>
 
       <div className="card stack">
-        <h3>Recent product activity</h3>
+        <div className="section-head">
+          <div>
+            <h3>Recent activity feed</h3>
+            <p className="muted small">
+              A human-readable audit trail of recent product activity from real users.
+            </p>
+          </div>
+        </div>
+
         {analytics.recent_events.length === 0 ? (
           <p className="muted">No tracked activity yet.</p>
         ) : (
@@ -237,18 +320,18 @@ function AdminAnalyticsPanel({ analytics }: { analytics: AnalyticsDashboard }) {
             {analytics.recent_events.map((event) => (
               <div key={event.id} className="timeline-item">
                 <div className="timeline-meta">
-                  <strong>{formatEventName(event.event_name)}</strong>
+                  <strong>{humanizeEventName(event.event_name)}</strong>
                   <span className="muted small">
                     {new Date(event.created_at).toLocaleString()}
                   </span>
                 </div>
                 <div className="chip-row">
-                  {event.path ? <span className="chip">{event.path}</span> : null}
+                  {event.path ? <span className="chip">{humanizePath(event.path)}</span> : null}
                   {event.user_email ? <span className="chip">{event.user_email}</span> : null}
                   {event.metadata &&
                     Object.entries(event.metadata).map(([key, value]) => (
                       <span key={key} className="chip">
-                        {key.replace(/_/g, " ")}: {String(value)}
+                        {formatMetadataKey(key)}: {String(value)}
                       </span>
                     ))}
                 </div>
@@ -265,7 +348,7 @@ function ProofList({ items }: { items: Submission[] }) {
   if (items.length === 0) {
     return (
       <div className="card stack spaced-lg">
-        <div className="badge">No submissions yet</div>
+        <div className="badge">No proofs yet</div>
         <h3>Start your first proof</h3>
         <p className="muted">
           Create a proof for an essay, memo, proposal, or other writing assignment. Then return
@@ -274,7 +357,7 @@ function ProofList({ items }: { items: Submission[] }) {
 
         <div className="toolbar">
           <a className="btn" href="/new">
-            Begin a new submission
+            Begin a new proof
           </a>
         </div>
       </div>
@@ -294,12 +377,12 @@ function ProofList({ items }: { items: Submission[] }) {
             <div>
               <h3 style={{ marginBottom: 6 }}>{item.title || "Untitled submission"}</h3>
               <div className="subtitle">
-                {item.assignment_mode || "writing"}
+                {humanizeAssignmentMode(item.assignment_mode)}
                 {item.course ? ` - ${item.course}` : ""}
               </div>
             </div>
 
-            <span className="status-pill">{item.visibility || "private"}</span>
+            <span className="status-pill">{humanizeVisibility(item.visibility)}</span>
           </div>
 
           <p className="muted small">
@@ -370,12 +453,10 @@ export default function DashboardPage() {
     <main className="shell">
       <div className="topnav">
         <div>
-          <h2 className="page-title">
-            {adminView ? "ProofMode admin dashboard" : "Your proofs"}
-          </h2>
+          <h2 className="page-title">{adminView ? "ProofMode operations" : "Your proofs"}</h2>
           <div className="subtitle">
             {adminView
-              ? "Show judges live traction, writing activity, and proof-of-process engagement."
+              ? "A live view of product traction, writing activity, and proof-of-process engagement."
               : "Track writing progress over time and return after real work sessions."}
           </div>
         </div>
@@ -403,14 +484,12 @@ export default function DashboardPage() {
           <div className="card stack">
             <div className="toolbar" style={{ justifyContent: "space-between" }}>
               <div>
-                <h3 style={{ marginBottom: 6 }}>
-                  {adminView ? "Your demo account proofs" : "Your proof list"}
-                </h3>
+                <h3 style={{ marginBottom: 6 }}>{adminView ? "Your proofs" : "Your proof list"}</h3>
                 <p className="muted small">
                   {user?.email ? `Signed in as ${user.email}` : "Signed in"}
                 </p>
               </div>
-              {user?.role ? <span className="status-pill">{user.role}</span> : null}
+              {user?.role ? <span className="status-pill">{formatRole(user.role)}</span> : null}
             </div>
           </div>
 

@@ -642,6 +642,13 @@ select {
   gap: 10px;
 }
 
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
 .analytics-list {
   display: flex;
   flex-direction: column;
@@ -665,6 +672,25 @@ select {
   gap: 12px;
   align-items: center;
   margin-bottom: 10px;
+}
+
+.analytics-row-value {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: right;
+}
+
+.analytics-rate {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: rgba(98, 225, 255, 0.12);
+  border: 1px solid rgba(98, 225, 255, 0.2);
+  color: #c6f7ff;
+  font-size: 0.78rem;
+  font-weight: 700;
 }
 
 .analytics-bar-shell {
@@ -720,5 +746,13 @@ select {
   .admin-stat-grid,
   .daily-grid {
     grid-template-columns: 1fr;
+  }
+
+  .section-head,
+  .analytics-row-head,
+  .analytics-row-value {
+    flex-direction: column;
+    align-items: flex-start;
+    text-align: left;
   }
 }
