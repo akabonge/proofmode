@@ -72,6 +72,15 @@ type FinalAnswers = {
   instructor_context: string;
 };
 
+type SaveSnapshot = {
+  assignmentPrompt: string;
+  dueAt: string;
+  essayHtml: string;
+  studentName: string;
+  includeNameOnPdf: boolean;
+  finalAnswers: FinalAnswers;
+};
+
 const DEFAULT_FINAL_ANSWERS: FinalAnswers = {
   biggest_change: "",
   most_helpful_input: "",
@@ -139,6 +148,10 @@ function renderPreviewHtml(value: string) {
     .join("");
 }
 
+function buildSnapshot(values: SaveSnapshot): string {
+  return JSON.stringify(values);
+}
+
 export default function ProofPage({ params }: { params: { id: string } }) {
   const [submission, setSubmission] = useState<Submission | null>(null);
   const [summary, setSummary] = useState<EvidenceSummary | null>(null);
@@ -159,6 +172,8 @@ export default function ProofPage({ params }: { params: { id: string } }) {
   const [capturing, setCapturing] = useState(false);
   const [refreshingGuidance, setRefreshingGuidance] = useState(false);
   const [message, setMessage] = useState("");
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+  const [loadedSnapshot, setLoadedSnapshot] = useState("");
 
   const pdfDownloadHref = useMemo(() => {
     return submission ? `${API}/v1/submissions/${submission.id}/pdf` : "#";
@@ -182,6 +197,25 @@ export default function ProofPage({ params }: { params: { id: string } }) {
     if (!summary?.last_checkpoint_at) return "No checkpoint captured yet.";
     return new Date(summary.last_checkpoint_at).toLocaleString();
   }, [summary]);
+  const currentSnapshot = useMemo(
+    () =>
+      buildSnapshot({
+        assignmentPrompt,
+        dueAt,
+        essayHtml,
+        studentName,
+        includeNameOnPdf,
+        finalAnswers,
+      }),
+    [assignmentPrompt, dueAt, essayHtml, studentName, includeNameOnPdf, finalAnswers]
+  );
+  const hasUnsavedChanges = currentSnapshot !== loadedSnapshot;
+  const saveStatusText = useMemo(() => {
+    if (saving) return "Saving draft...";
+    if (hasUnsavedChanges) return "Unsaved changes";
+    if (!lastSavedAt) return "Not saved yet";
+    return `Saved ${new Date(lastSavedAt).toLocaleString()}`;
+  }, [hasUnsavedChanges, lastSavedAt, saving]);
 
   const nextStepText = useMemo(() => {
     const days = daysBetweenNow(summary?.last_checkpoint_at);
@@ -253,11 +287,23 @@ export default function ProofPage({ params }: { params: { id: string } }) {
       setEssayHtml(renderPreviewHtml(sub.essay_text || ""));
       setStudentName(sub.student_name || "");
       setIncludeNameOnPdf(Boolean(sub.include_name_on_pdf));
-      setFinalAnswers({
+      const nextFinalAnswers = {
         biggest_change: sub.answers?.biggest_change || "",
         most_helpful_input: sub.answers?.most_helpful_input || "",
         instructor_context: sub.answers?.instructor_context || "",
-      });
+      };
+      setFinalAnswers(nextFinalAnswers);
+      setLastSavedAt(sub.updated_at || null);
+      setLoadedSnapshot(
+        buildSnapshot({
+          assignmentPrompt: sub.assignment_prompt || "",
+          dueAt: sub.due_at ? new Date(sub.due_at).toISOString().slice(0, 16) : "",
+          essayHtml: renderPreviewHtml(sub.essay_text || ""),
+          studentName: sub.student_name || "",
+          includeNameOnPdf: Boolean(sub.include_name_on_pdf),
+          finalAnswers: nextFinalAnswers,
+        })
+      );
 
       await loadGuidance(sub.essay_text || "", true);
     } catch (err) {
@@ -278,6 +324,20 @@ export default function ProofPage({ params }: { params: { id: string } }) {
     trackEvent("proof_opened", { path: `/p/${params.id}` });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id]);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        if (!saving) {
+          void saveProof();
+        }
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  });
 
   async function saveProof() {
     if (!submission) return;
@@ -311,6 +371,7 @@ export default function ProofPage({ params }: { params: { id: string } }) {
       );
 
       await loadAll();
+      setLastSavedAt(new Date().toISOString());
       setMessage("Draft saved.");
     } catch (err) {
       const message = getErrorMessage(err, "Could not save proof.");
@@ -453,27 +514,33 @@ export default function ProofPage({ params }: { params: { id: string } }) {
         </div>
       </div>
 
-      <div className="card stack spaced-lg">
-        <div className="badge">Pilot writing workspace</div>
-        <p className="muted">
-          This version keeps the writing experience front and center while capturing process signals in the side panel.
-        </p>
-        <div className="metric-grid">
-          <div className="metric-card">
+      <div className="card writer-summary-card spaced-lg">
+        <div className="writer-summary-copy">
+          <div className="badge">Pilot writing workspace</div>
+          <p className="muted">
+            A familiar, document-first editor for the pilot. The writing canvas stays central while ProofMode process features live in the side panel.
+          </p>
+        </div>
+        <div className="writer-summary-grid">
+          <div className="writer-highlight">
+            <div className="metric-label">Save status</div>
+            <div className="small muted">{saveStatusText}</div>
+          </div>
+          <div className="writer-highlight">
             <div className="metric-label">Last checkpoint</div>
             <div className="small muted">{lastCheckpointText}</div>
           </div>
-          <div className="metric-card">
-            <div className="metric-label">Next best step</div>
-            <div className="small muted">{nextStepText}</div>
-          </div>
-          <div className="metric-card">
+          <div className="writer-highlight">
             <div className="metric-label">Word count</div>
             <div className="metric-value">{wordCount}</div>
           </div>
-          <div className="metric-card">
+          <div className="writer-highlight">
             <div className="metric-label">Evidence strength</div>
             <div className="metric-value">{humanizeEvidenceStrength(summary.evidence_strength)}</div>
+          </div>
+          <div className="writer-highlight writer-highlight-wide">
+            <div className="metric-label">Next best step</div>
+            <div className="small muted">{nextStepText}</div>
           </div>
         </div>
       </div>
@@ -483,14 +550,17 @@ export default function ProofPage({ params }: { params: { id: string } }) {
           <div className="card stack writer-card">
             <div className="writer-header">
               <div>
-                <h3>Draft editor</h3>
+                <h3>Document canvas</h3>
                 <p className="muted small">
-                  Write here directly. Formatting is intentionally familiar and lightweight for the pilot.
+                  Write here directly in a larger, familiar workspace. Use <strong>Ctrl/Cmd + S</strong> to save at any time.
                 </p>
               </div>
               <div className="chip-row">
                 <span className="chip">{humanizeAssignmentMode(submission.assignment_mode)}</span>
                 <span className="chip">{wordCount} words</span>
+                <span className="chip">
+                  {hasUnsavedChanges ? "Unsaved changes" : "Saved"}
+                </span>
               </div>
             </div>
 
@@ -501,8 +571,11 @@ export default function ProofPage({ params }: { params: { id: string } }) {
             />
 
             <div className="writer-footer">
-              <div className="muted small">
-                The editor autosaves only when you click save. Capture checkpoints after meaningful writing sessions.
+              <div className="writer-status-copy">
+                <div className="muted small">{saveStatusText}</div>
+                <div className="muted small">
+                  Capture checkpoints after meaningful writing sessions, not every tiny edit.
+                </div>
               </div>
               <div className="toolbar">
                 <button onClick={saveProof} disabled={saving}>
