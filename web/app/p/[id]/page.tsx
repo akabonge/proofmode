@@ -59,6 +59,7 @@ type Submission = {
   visibility: string;
   share_enabled?: boolean;
   share_token?: string | null;
+  updated_at?: string | null;
   answers?: {
     biggest_change?: string;
     most_helpful_input?: string;
