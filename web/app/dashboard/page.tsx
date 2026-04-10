@@ -271,27 +271,29 @@ function AdminAnalyticsPanel({ analytics }: { analytics: AnalyticsDashboard }) {
             {analytics.recent_users.length === 0 ? (
               <p className="muted">No users found.</p>
             ) : (
-              <div className="user-table">
-                <div className="user-table-head">
-                  <span>User</span>
-                  <span>Role</span>
-                  <span>Created</span>
-                  <span>Last seen</span>
-                  <span>Proofs</span>
-                  <span>Checkpoints</span>
-                </div>
-                {analytics.recent_users.map((userRow) => (
-                  <div key={userRow.email} className="user-table-row">
-                    <span>{userRow.email}</span>
-                    <span>
-                      <span className="status-pill">{formatRole(userRow.role)}</span>
-                    </span>
-                    <span>{new Date(userRow.created_at).toLocaleDateString()}</span>
-                    <span>{formatLastSeen(userRow.last_seen_at)}</span>
-                    <span>{userRow.submissions_created}</span>
-                    <span>{userRow.checkpoints_captured}</span>
+              <div className="user-table-wrap">
+                <div className="user-table">
+                  <div className="user-table-head">
+                    <span>User</span>
+                    <span>Role</span>
+                    <span>Created</span>
+                    <span>Last seen</span>
+                    <span>Proofs</span>
+                    <span>Checkpoints</span>
                   </div>
-                ))}
+                  {analytics.recent_users.map((userRow) => (
+                    <div key={userRow.email} className="user-table-row">
+                      <span className="user-email">{userRow.email}</span>
+                      <span>
+                        <span className="status-pill">{formatRole(userRow.role)}</span>
+                      </span>
+                      <span>{new Date(userRow.created_at).toLocaleDateString()}</span>
+                      <span className="user-last-seen">{formatLastSeen(userRow.last_seen_at)}</span>
+                      <span>{userRow.submissions_created}</span>
+                      <span>{userRow.checkpoints_captured}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>

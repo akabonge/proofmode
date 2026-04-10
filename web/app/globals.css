@@ -748,10 +748,21 @@ select {
   gap: 10px;
 }
 
+.user-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
 .user-table-head,
 .user-table-row {
   display: grid;
-  grid-template-columns: minmax(190px, 1.8fr) minmax(90px, 0.8fr) minmax(90px, 0.8fr) minmax(180px, 1.4fr) minmax(70px, 0.6fr) minmax(90px, 0.7fr);
+  grid-template-columns:
+    minmax(170px, 1.8fr)
+    minmax(86px, 0.8fr)
+    minmax(88px, 0.8fr)
+    minmax(150px, 1.2fr)
+    minmax(56px, 0.45fr)
+    minmax(88px, 0.6fr);
   gap: 12px;
   align-items: center;
 }
@@ -769,6 +780,16 @@ select {
   border-radius: 16px;
   padding: 12px 14px;
   font-size: 0.92rem;
+}
+
+.user-table-head > span,
+.user-table-row > span {
+  min-width: 0;
+}
+
+.user-email,
+.user-last-seen {
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 980px) {
