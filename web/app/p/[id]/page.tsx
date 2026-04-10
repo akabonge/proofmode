@@ -848,7 +848,7 @@ export default function ProofPage({ params }: { params: { id: string } }) {
               </div>
             )}
           </div>
-        </div>
+        </aside>
       </div>
     </main>
   );
