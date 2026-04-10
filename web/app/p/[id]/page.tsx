@@ -6,10 +6,8 @@ import { trackEvent } from "../../../lib/analytics";
 import RichTextEditor, { extractPlainTextFromHtml } from "../../../components/rich-text-editor";
 import {
   humanizeAssignmentMode,
-  humanizeChangeType,
   humanizeEvidenceStrength,
   humanizeSourceTool,
-  humanizeStage,
   humanizeVisibility,
 } from "../../../lib/display";
 
@@ -245,6 +243,38 @@ export default function ProofPage({ params }: { params: { id: string } }) {
     }
     return `It has been ${days} days since your last checkpoint. Reopen this proof after your next real writing session and capture the new version.`;
   }, [summary]);
+  const guidanceSummary = useMemo(() => {
+    const stage = guidance?.stage || "starting";
+    const changeType = guidance?.detected_change || "first_capture";
+
+    const stageText: Record<string, string> = {
+      starting: "This still looks like an early draft.",
+      building: "This looks like you are actively building the draft.",
+      developing: "This looks like you are developing ideas and structure.",
+      revising: "This looks like a revision-stage draft.",
+      finalizing: "This looks like a later-stage revision.",
+    };
+
+    const changeText: Record<string, string> = {
+      first_capture: "The prompt is based on your first captured version.",
+      evidence_added: "The prompt reflects added evidence or support.",
+      major_revision: "The prompt reflects a substantial change from the last checkpoint.",
+      expansion: "The prompt reflects a larger expansion of the draft.",
+      reframing: "The prompt reflects a shift in direction or focus.",
+      polishing: "The prompt reflects wording, clarity, or cleanup edits.",
+      development: "The prompt reflects added development of your ideas.",
+    };
+
+    return {
+      stage: stageText[stage] || "The prompt is based on the current stage of your draft.",
+      change:
+        changeText[changeType] ||
+        "The prompt is based on how this version differs from your last checkpoint.",
+      assignment: `Assignment context: ${humanizeAssignmentMode(
+        guidance?.assignment_mode || submission?.assignment_mode
+      )}.`,
+    };
+  }, [guidance?.assignment_mode, guidance?.detected_change, guidance?.stage, submission?.assignment_mode]);
 
   async function loadGuidance(currentDraft: string, quiet = false) {
     try {
@@ -607,20 +637,15 @@ export default function ProofPage({ params }: { params: { id: string } }) {
             </div>
 
             <div className="question-box">
-              <div className="question-meta">
-                <span className="status-pill">
-                  {humanizeAssignmentMode(guidance?.assignment_mode || submission.assignment_mode)}
-                </span>
-                <span className="status-pill">{humanizeStage(guidance?.stage || "starting")}</span>
-                <span className="status-pill">
-                  {humanizeChangeType(guidance?.detected_change || "first_capture")}
-                </span>
-              </div>
-
               <strong>Moment question</strong>
               <p className="muted">
                 {guidance?.dynamic_prompt || "Refresh guidance after your draft starts taking shape."}
               </p>
+              <div className="question-box guidance-explainer">
+                <p className="muted small">{guidanceSummary.stage}</p>
+                <p className="muted small">{guidanceSummary.change}</p>
+                <p className="muted small">{guidanceSummary.assignment}</p>
+              </div>
 
               <textarea
                 rows={3}
@@ -635,7 +660,7 @@ export default function ProofPage({ params }: { params: { id: string } }) {
                   onClick={() => loadGuidance(essayHtml)}
                   disabled={refreshingGuidance}
                 >
-                  {refreshingGuidance ? "Refreshing..." : "Refresh moment question"}
+                  {refreshingGuidance ? "Updating..." : "Update reflection prompt"}
                 </button>
 
                 <button onClick={captureCheckpoint} disabled={capturing}>
@@ -928,7 +953,7 @@ export default function ProofPage({ params }: { params: { id: string } }) {
               <div>
                 <div className="badge">Pilot writing workspace</div>
                 <p className="muted small writer-intro">
-                  A familiar document view for the pilot. Use <strong>Ctrl/Cmd + S</strong> to save, then open ProofMode tools from the top bar when you need them.
+                  Use the top ProofMode tools to review your snapshot, update assignment details, capture checkpoints, check evidence, revisit the timeline, and prepare your export.
                 </p>
               </div>
               <div className="chip-row">
