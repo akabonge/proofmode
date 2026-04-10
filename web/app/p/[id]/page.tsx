@@ -42,6 +42,11 @@ type Guidance = {
   detected_change: string;
   dynamic_prompt: string;
   suggested_checkpoint_note: string;
+  alignment_status: "on_track" | "developing" | "needs_attention";
+  alignment_summary: string;
+  missing_requirements: string[];
+  recommended_next_step: string;
+  prompt_keyword_hits: string[];
 };
 
 type Submission = {
@@ -275,6 +280,25 @@ export default function ProofPage({ params }: { params: { id: string } }) {
       )}.`,
     };
   }, [guidance?.assignment_mode, guidance?.detected_change, guidance?.stage, submission?.assignment_mode]);
+  const guardrailTone = useMemo(() => {
+    switch (guidance?.alignment_status) {
+      case "on_track":
+        return {
+          label: "On track",
+          className: "guardrail-pill on-track",
+        };
+      case "needs_attention":
+        return {
+          label: "Needs attention",
+          className: "guardrail-pill needs-attention",
+        };
+      default:
+        return {
+          label: "In progress",
+          className: "guardrail-pill developing",
+        };
+    }
+  }, [guidance?.alignment_status]);
 
   async function loadGuidance(currentDraft: string, quiet = false) {
     try {
@@ -645,6 +669,36 @@ export default function ProofPage({ params }: { params: { id: string } }) {
                 <p className="muted small">{guidanceSummary.stage}</p>
                 <p className="muted small">{guidanceSummary.change}</p>
                 <p className="muted small">{guidanceSummary.assignment}</p>
+              </div>
+
+              <div className="question-box guidance-explainer">
+                <div className="docs-proof-panel-head">
+                  <strong>Assignment guardrails</strong>
+                  <span className={guardrailTone.className}>{guardrailTone.label}</span>
+                </div>
+                <p className="muted small">
+                  {guidance?.alignment_summary || "Guardrails update as the draft changes over time."}
+                </p>
+                <p className="muted small">
+                  <strong>Recommended next move:</strong>{" "}
+                  {guidance?.recommended_next_step || "Keep building the draft and refresh the prompt after meaningful changes."}
+                </p>
+                {guidance?.missing_requirements?.length ? (
+                  <div>
+                    <p className="muted small"><strong>Still missing or weak:</strong></p>
+                    <ul className="info-list small">
+                      {guidance.missing_requirements.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {guidance?.prompt_keyword_hits?.length ? (
+                  <p className="muted small">
+                    <strong>Prompt signals already showing up:</strong>{" "}
+                    {guidance.prompt_keyword_hits.join(", ")}
+                  </p>
+                ) : null}
               </div>
 
               <textarea

@@ -63,6 +63,11 @@ class GuidanceOut(BaseModel):
     detected_change: str
     dynamic_prompt: str
     suggested_checkpoint_note: str
+    alignment_status: Literal["on_track", "developing", "needs_attention"]
+    alignment_summary: str
+    missing_requirements: list[str] = Field(default_factory=list)
+    recommended_next_step: str
+    prompt_keyword_hits: list[str] = Field(default_factory=list)
 
 
 class CheckpointCreate(BaseModel):

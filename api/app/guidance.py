@@ -4,6 +4,29 @@ from datetime import datetime, timezone
 from .process import compute_diff_metrics, normalize_text
 
 
+STOPWORDS = {
+    "about",
+    "after",
+    "also",
+    "because",
+    "between",
+    "could",
+    "essay",
+    "final",
+    "from",
+    "into",
+    "should",
+    "their",
+    "there",
+    "these",
+    "this",
+    "through",
+    "using",
+    "write",
+    "your",
+}
+
+
 def classify_assignment_mode(assignment_prompt: str | None, title: str | None = None, assignment_type: str | None = None) -> str:
     haystack = " ".join(
         [
@@ -135,6 +158,93 @@ def suggested_checkpoint_note(change_type: str, assignment_mode: str) -> str:
     return mapping.get(change_type, "Worked on the assignment and moved the draft forward.")
 
 
+def _extract_prompt_keywords(assignment_prompt: str | None, title: str | None) -> list[str]:
+    haystack = " ".join([(assignment_prompt or ""), (title or "")]).lower()
+    words = re.findall(r"[a-z]{5,}", haystack)
+    seen: list[str] = []
+    for word in words:
+        if word in STOPWORDS or word in seen:
+            continue
+        seen.append(word)
+    return seen[:8]
+
+
+def _has_citation_signal(text: str) -> bool:
+    citation_regex = r"\([A-Za-z].+?,\s?\d{4}\)|\[[0-9]+\]|doi|et al\.|works cited|references"
+    return bool(re.search(citation_regex, text.lower()))
+
+
+def _has_conclusion_signal(text: str) -> bool:
+    return any(
+        marker in text.lower()
+        for marker in ["in conclusion", "to conclude", "overall", "ultimately", "in summary"]
+    )
+
+
+def analyze_assignment_guardrails(
+    assignment_prompt: str | None,
+    title: str | None,
+    assignment_mode: str,
+    stage: str,
+    change_type: str,
+    current_text: str | None,
+) -> dict:
+    text = current_text or ""
+    normalized = normalize_text(text)
+    word_count = len([word for word in text.split() if word.strip()])
+    prompt_keywords = _extract_prompt_keywords(assignment_prompt, title)
+    keyword_hits = [keyword for keyword in prompt_keywords if keyword in normalized]
+    keyword_ratio = (len(keyword_hits) / len(prompt_keywords)) if prompt_keywords else 1.0
+
+    missing_requirements: list[str] = []
+
+    if word_count < 80:
+        missing_requirements.append("A fuller working draft")
+
+    if prompt_keywords and keyword_ratio < 0.25:
+        missing_requirements.append("Clearer alignment with the assignment prompt")
+
+    if assignment_mode == "research_paper" and not _has_citation_signal(text):
+        missing_requirements.append("Evidence or source integration")
+
+    if assignment_mode == "argumentative_essay" and "thesis" not in normalized and "claim" not in normalized:
+        missing_requirements.append("A clearly stated claim or thesis")
+
+    if assignment_mode in {"research_paper", "argumentative_essay", "general_writing", "proposal"} and not _has_conclusion_signal(text) and stage in {"revising", "finalizing"}:
+        missing_requirements.append("A stronger closing or conclusion")
+
+    if len(missing_requirements) >= 3 or (word_count < 120 and stage in {"revising", "finalizing"}):
+        alignment_status = "needs_attention"
+    elif missing_requirements or keyword_ratio < 0.55:
+        alignment_status = "developing"
+    else:
+        alignment_status = "on_track"
+
+    if alignment_status == "on_track":
+        alignment_summary = "The draft looks aligned with the assignment and current stage of work."
+    elif alignment_status == "developing":
+        alignment_summary = "The draft is moving in the right direction, but a few assignment expectations still look unfinished."
+    else:
+        alignment_summary = "The draft may be drifting from the assignment or missing key requirements for this stage."
+
+    if missing_requirements:
+        recommended_next_step = f"Focus next on {missing_requirements[0].lower()}."
+    elif change_type == "polishing":
+        recommended_next_step = "Keep refining clarity and sentence-level flow, then capture the next meaningful revision."
+    elif change_type == "major_revision":
+        recommended_next_step = "Stabilize the revised structure and make sure each section now supports the assignment goal."
+    else:
+        recommended_next_step = "Keep developing the draft and capture the next checkpoint after a substantial writing session."
+
+    return {
+        "alignment_status": alignment_status,
+        "alignment_summary": alignment_summary,
+        "missing_requirements": missing_requirements[:4],
+        "recommended_next_step": recommended_next_step,
+        "prompt_keyword_hits": keyword_hits[:4],
+    }
+
+
 def build_guidance(
     assignment_prompt: str | None,
     title: str | None,
@@ -149,6 +259,14 @@ def build_guidance(
     change_type = detect_change_type(previous_text, current_text)
     prompt = generate_dynamic_prompt(assignment_mode, stage, change_type)
     note_hint = suggested_checkpoint_note(change_type, assignment_mode)
+    guardrails = analyze_assignment_guardrails(
+        assignment_prompt=assignment_prompt,
+        title=title,
+        assignment_mode=assignment_mode,
+        stage=stage,
+        change_type=change_type,
+        current_text=current_text,
+    )
 
     return {
         "assignment_mode": assignment_mode,
@@ -156,4 +274,5 @@ def build_guidance(
         "detected_change": change_type,
         "dynamic_prompt": prompt,
         "suggested_checkpoint_note": note_hint,
+        **guardrails,
     }
