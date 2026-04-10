@@ -55,6 +55,10 @@ class ShareUpdate(BaseModel):
 
 class GuidanceRequest(BaseModel):
     current_draft: Optional[str] = None
+    assignment_prompt: Optional[str] = None
+    due_at: Optional[datetime] = None
+    title: Optional[str] = None
+    assignment_type: Optional[str] = None
 
 
 class GuidanceOut(BaseModel):
@@ -63,6 +67,10 @@ class GuidanceOut(BaseModel):
     detected_change: str
     dynamic_prompt: str
     suggested_checkpoint_note: str
+    comparison_source: Literal["blank", "saved_draft", "last_checkpoint"]
+    added_chars: int = 0
+    removed_chars: int = 0
+    change_ratio: float = 0
     alignment_status: Literal["on_track", "developing", "needs_attention"]
     alignment_summary: str
     missing_requirements: list[str] = Field(default_factory=list)

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { API, apiFetch, seedCsrf } from "../../../lib/api";
 import { trackEvent } from "../../../lib/analytics";
 import RichTextEditor, { extractPlainTextFromHtml } from "../../../components/rich-text-editor";
@@ -37,21 +37,18 @@ type EvidenceSummary = {
 };
 
 type Guidance = {
-  assignment_mode: string;
-  stage: string;
-  detected_change: string;
   dynamic_prompt: string;
   suggested_checkpoint_note: string;
-  alignment_status: "on_track" | "developing" | "needs_attention";
-  alignment_summary: string;
-  missing_requirements: string[];
-  recommended_next_step: string;
-  prompt_keyword_hits: string[];
+  comparison_source: "blank" | "saved_draft" | "last_checkpoint";
+  added_chars: number;
+  removed_chars: number;
+  change_ratio: number;
 };
 
 type Submission = {
   id: string;
   title: string;
+  assignment_type?: string | null;
   assignment_mode: string;
   course?: string | null;
   assignment_prompt?: string | null;
@@ -83,6 +80,14 @@ type SaveSnapshot = {
   studentName: string;
   includeNameOnPdf: boolean;
   finalAnswers: FinalAnswers;
+};
+
+type GuidancePreview = {
+  currentDraft: string;
+  assignmentPrompt: string;
+  dueAt: string;
+  title?: string | null;
+  assignmentType?: string | null;
 };
 
 type ProofPanelKey =
@@ -188,6 +193,7 @@ export default function ProofPage({ params }: { params: { id: string } }) {
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [loadedSnapshot, setLoadedSnapshot] = useState("");
   const [activePanel, setActivePanel] = useState<ProofPanelKey>("snapshot");
+  const guidanceRequestRef = useRef(0);
 
   const pdfDownloadHref = useMemo(() => {
     return submission ? `${API}/v1/submissions/${submission.id}/pdf` : "#";
@@ -248,59 +254,43 @@ export default function ProofPage({ params }: { params: { id: string } }) {
     }
     return `It has been ${days} days since your last checkpoint. Reopen this proof after your next real writing session and capture the new version.`;
   }, [summary]);
-  const guidanceSummary = useMemo(() => {
-    const stage = guidance?.stage || "starting";
-    const changeType = guidance?.detected_change || "first_capture";
-
-    const stageText: Record<string, string> = {
-      starting: "This still looks like an early draft.",
-      building: "This looks like you are actively building the draft.",
-      developing: "This looks like you are developing ideas and structure.",
-      revising: "This looks like a revision-stage draft.",
-      finalizing: "This looks like a later-stage revision.",
-    };
-
-    const changeText: Record<string, string> = {
-      first_capture: "The prompt is based on your first captured version.",
-      evidence_added: "The prompt reflects added evidence or support.",
-      major_revision: "The prompt reflects a substantial change from the last checkpoint.",
-      expansion: "The prompt reflects a larger expansion of the draft.",
-      reframing: "The prompt reflects a shift in direction or focus.",
-      polishing: "The prompt reflects wording, clarity, or cleanup edits.",
-      development: "The prompt reflects added development of your ideas.",
-    };
-
-    return {
-      stage: stageText[stage] || "The prompt is based on the current stage of your draft.",
-      change:
-        changeText[changeType] ||
-        "The prompt is based on how this version differs from your last checkpoint.",
-      assignment: `Assignment context: ${humanizeAssignmentMode(
-        guidance?.assignment_mode || submission?.assignment_mode
-      )}.`,
-    };
-  }, [guidance?.assignment_mode, guidance?.detected_change, guidance?.stage, submission?.assignment_mode]);
-  const guardrailTone = useMemo(() => {
-    switch (guidance?.alignment_status) {
-      case "on_track":
-        return {
-          label: "On track",
-          className: "guardrail-pill on-track",
-        };
-      case "needs_attention":
-        return {
-          label: "Needs attention",
-          className: "guardrail-pill needs-attention",
-        };
-      default:
-        return {
-          label: "In progress",
-          className: "guardrail-pill developing",
-        };
+  const momentQuestionText = useMemo(() => {
+    if (!guidance) {
+      if (!essayPlainText.trim() && !assignmentPrompt.trim()) {
+        return "Start writing or add assignment details and the moment question will appear here.";
+      }
+      return "Moment question is updating from your latest draft changes.";
     }
-  }, [guidance?.alignment_status]);
 
-  async function loadGuidance(currentDraft: string, quiet = false) {
+    if (guidance.comparison_source === "last_checkpoint" && guidance.change_ratio === 0) {
+      return "Keep writing. The next moment question will update after a real draft change.";
+    }
+
+    return guidance.dynamic_prompt || "Keep writing and the next moment question will appear here.";
+  }, [assignmentPrompt, essayPlainText, guidance]);
+  const momentQuestionMeta = useMemo(() => {
+    if (refreshingGuidance) {
+      return "Updating automatically from your latest draft changes.";
+    }
+
+    if (!guidance) {
+      return "Moment questions update automatically from the draft and assignment details.";
+    }
+
+    if (guidance.comparison_source === "last_checkpoint") {
+      return "Based on the changes since your last checkpoint plus the assignment details.";
+    }
+
+    if (guidance.comparison_source === "saved_draft") {
+      return "Based on the changes since your latest saved draft plus the assignment details.";
+    }
+
+    return "Based on the current draft and assignment details.";
+  }, [guidance, refreshingGuidance]);
+
+  async function loadGuidance(preview: GuidancePreview, quiet = false) {
+    const requestId = ++guidanceRequestRef.current;
+
     try {
       setRefreshingGuidance(true);
 
@@ -308,17 +298,27 @@ export default function ProofPage({ params }: { params: { id: string } }) {
         `/v1/submissions/${params.id}/guidance`,
         {
           method: "POST",
-          body: JSON.stringify({ current_draft: currentDraft }),
+          body: JSON.stringify({
+            current_draft: preview.currentDraft,
+            assignment_prompt: preview.assignmentPrompt || null,
+            due_at: preview.dueAt ? new Date(preview.dueAt).toISOString() : null,
+            title: preview.title || null,
+            assignment_type: preview.assignmentType || null,
+          }),
         },
         true
       );
 
-      setGuidance(data);
-
-      if (!checkpointNote.trim() && data?.suggested_checkpoint_note) {
-        setCheckpointNote(data.suggested_checkpoint_note);
+      if (requestId !== guidanceRequestRef.current) {
+        return;
       }
+
+      setGuidance(data);
     } catch (err) {
+      if (requestId !== guidanceRequestRef.current) {
+        return;
+      }
+
       const message = getErrorMessage(err, "Could not refresh moment question.");
 
       if (isUnauthorized(message)) {
@@ -329,7 +329,9 @@ export default function ProofPage({ params }: { params: { id: string } }) {
       setGuidance(null);
       if (!quiet) setMessage(message);
     } finally {
-      setRefreshingGuidance(false);
+      if (requestId === guidanceRequestRef.current) {
+        setRefreshingGuidance(false);
+      }
     }
   }
 
@@ -370,7 +372,16 @@ export default function ProofPage({ params }: { params: { id: string } }) {
         })
       );
 
-      await loadGuidance(sub.essay_text || "", true);
+      await loadGuidance(
+        {
+          currentDraft: sub.essay_text || "",
+          assignmentPrompt: sub.assignment_prompt || "",
+          dueAt: sub.due_at ? new Date(sub.due_at).toISOString().slice(0, 16) : "",
+          title: sub.title,
+          assignmentType: sub.assignment_type,
+        },
+        true
+      );
     } catch (err) {
       const message = getErrorMessage(err, "Could not load this proof page.");
 
@@ -403,6 +414,39 @@ export default function ProofPage({ params }: { params: { id: string } }) {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   });
+
+  useEffect(() => {
+    if (activePanel !== "checkpoint" || !submission) {
+      return;
+    }
+
+    if (!essayPlainText.trim() && !assignmentPrompt.trim()) {
+      setGuidance(null);
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      void loadGuidance(
+        {
+          currentDraft: essayHtml,
+          assignmentPrompt,
+          dueAt,
+          title: submission.title,
+          assignmentType: submission.assignment_type,
+        },
+        true
+      );
+    }, 600);
+
+    return () => window.clearTimeout(timeout);
+  }, [
+    activePanel,
+    assignmentPrompt,
+    dueAt,
+    essayHtml,
+    essayPlainText,
+    submission,
+  ]);
 
   async function saveProof() {
     if (!submission) return;
@@ -662,44 +706,8 @@ export default function ProofPage({ params }: { params: { id: string } }) {
 
             <div className="question-box">
               <strong>Moment question</strong>
-              <p className="muted">
-                {guidance?.dynamic_prompt || "Refresh guidance after your draft starts taking shape."}
-              </p>
-              <div className="question-box guidance-explainer">
-                <p className="muted small">{guidanceSummary.stage}</p>
-                <p className="muted small">{guidanceSummary.change}</p>
-                <p className="muted small">{guidanceSummary.assignment}</p>
-              </div>
-
-              <div className="question-box guidance-explainer">
-                <div className="docs-proof-panel-head">
-                  <strong>Assignment guardrails</strong>
-                  <span className={guardrailTone.className}>{guardrailTone.label}</span>
-                </div>
-                <p className="muted small">
-                  {guidance?.alignment_summary || "Guardrails update as the draft changes over time."}
-                </p>
-                <p className="muted small">
-                  <strong>Recommended next move:</strong>{" "}
-                  {guidance?.recommended_next_step || "Keep building the draft and refresh the prompt after meaningful changes."}
-                </p>
-                {guidance?.missing_requirements?.length ? (
-                  <div>
-                    <p className="muted small"><strong>Still missing or weak:</strong></p>
-                    <ul className="info-list small">
-                      {guidance.missing_requirements.map((item) => (
-                        <li key={item}>{item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-                {guidance?.prompt_keyword_hits?.length ? (
-                  <p className="muted small">
-                    <strong>Prompt signals already showing up:</strong>{" "}
-                    {guidance.prompt_keyword_hits.join(", ")}
-                  </p>
-                ) : null}
-              </div>
+              <p className="muted small">{momentQuestionMeta}</p>
+              <p>{momentQuestionText}</p>
 
               <textarea
                 rows={3}
@@ -709,14 +717,6 @@ export default function ProofPage({ params }: { params: { id: string } }) {
               />
 
               <div className="toolbar">
-                <button
-                  className="secondary"
-                  onClick={() => loadGuidance(essayHtml)}
-                  disabled={refreshingGuidance}
-                >
-                  {refreshingGuidance ? "Updating..." : "Update reflection prompt"}
-                </button>
-
                 <button onClick={captureCheckpoint} disabled={capturing}>
                   {capturing ? "Capturing..." : "Capture checkpoint"}
                 </button>

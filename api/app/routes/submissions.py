@@ -13,7 +13,7 @@ from ..deps import get_current_user, require_csrf
 from ..guidance import build_guidance, classify_assignment_mode
 from ..models import Submission, SubmissionCheckpoint, User
 from ..pdfgen import build_proof_pdf
-from ..process import compute_diff_metrics, summarize_checkpoints
+from ..process import compute_diff_metrics, normalize_text, summarize_checkpoints
 from ..schemas import (
     AnswersUpdate,
     CheckpointCreate,
@@ -298,28 +298,39 @@ def submission_guidance(
     sub = _owned_submission_or_404(db, sub_id, user.id)
     rows = _checkpoints_for_submission(db, sub.id)
 
-    previous_text = ""
-    if rows:
-        previous_text = _html_to_plain_text(decrypt_text(rows[-1].draft_text_enc))
-    elif sub.essay_text_enc:
-        previous_text = _essay_plain_text(sub)
-
+    saved_draft = _essay_plain_text(sub)
     current_draft = (
         _html_to_plain_text(payload.current_draft)
         if payload.current_draft is not None
-        else _essay_plain_text(sub)
+        else saved_draft
     )
 
+    previous_text = ""
+    comparison_source = "blank"
+    if rows:
+        previous_text = _html_to_plain_text(decrypt_text(rows[-1].draft_text_enc))
+        comparison_source = "last_checkpoint"
+    elif payload.current_draft is not None and normalize_text(current_draft) != normalize_text(saved_draft):
+        previous_text = saved_draft
+        comparison_source = "saved_draft"
+
     guidance = build_guidance(
-        assignment_prompt=_assignment_prompt(sub),
-        title=sub.title,
-        assignment_type=sub.assignment_type,
-        due_at=sub.due_at,
+        assignment_prompt=payload.assignment_prompt if payload.assignment_prompt is not None else _assignment_prompt(sub),
+        title=payload.title if payload.title is not None else sub.title,
+        assignment_type=payload.assignment_type if payload.assignment_type is not None else sub.assignment_type,
+        due_at=payload.due_at if payload.due_at is not None else sub.due_at,
         checkpoint_count=len(rows),
         previous_text=previous_text,
         current_text=current_draft,
     )
-    return GuidanceOut(**guidance)
+    metrics = compute_diff_metrics(previous_text, current_draft)
+    return GuidanceOut(
+        **guidance,
+        comparison_source=comparison_source,
+        added_chars=metrics["added_chars"],
+        removed_chars=metrics["removed_chars"],
+        change_ratio=metrics["change_ratio"],
+    )
 
 
 @router.post("/submissions/{sub_id}/checkpoints", response_model=CheckpointOut, dependencies=[Depends(require_csrf)])
@@ -340,8 +351,6 @@ def create_checkpoint(
     previous_text = ""
     if previous_rows:
         previous_text = _html_to_plain_text(decrypt_text(previous_rows[-1].draft_text_enc))
-    elif sub.essay_text_enc:
-        previous_text = _essay_plain_text(sub)
 
     guidance = build_guidance(
         assignment_prompt=_assignment_prompt(sub),
