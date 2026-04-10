@@ -496,23 +496,72 @@ export default function ProofPage({ params }: { params: { id: string } }) {
 
   return (
     <main className="shell writer-page">
-      <div className="topnav">
-        <div>
-          <h2 className="page-title">{submission.title}</h2>
-          <div className="subtitle">
-            {humanizeAssignmentMode(submission.assignment_mode)}
-            {submission.course ? ` - ${submission.course}` : ""}
+      <div className="docs-topbar">
+        <div className="docs-topbar-main">
+          <div className="docs-brand-mark" aria-hidden="true">
+            P
+          </div>
+          <div className="docs-title-block">
+            <h2 className="page-title">{submission.title}</h2>
+            <div className="subtitle">
+              {humanizeAssignmentMode(submission.assignment_mode)}
+              {submission.course ? ` - ${submission.course}` : ""}
+            </div>
+            <div className="docs-menu-row">
+              <button type="button" className="docs-menu-button">File</button>
+              <button type="button" className="docs-menu-button">Edit</button>
+              <button type="button" className="docs-menu-button">Insert</button>
+              <button type="button" className="docs-menu-button">Format</button>
+              <button type="button" className="docs-menu-button">Tools</button>
+              <button type="button" className="docs-menu-button">ProofMode</button>
+            </div>
           </div>
         </div>
 
-        <div className="toolbar">
+        <div className="docs-actions">
+          <a className="btn secondary" href="#proof-snapshot">
+            Snapshot
+          </a>
+          <button onClick={saveProof} disabled={saving}>
+            {saving ? "Saving..." : "Save"}
+          </button>
+          <button className="secondary" onClick={captureCheckpoint} disabled={capturing}>
+            {capturing ? "Capturing..." : "Checkpoint"}
+          </button>
           <a className="btn secondary" href="/dashboard">
-            Back to dashboard
+            Back
           </a>
           <a className="btn secondary" href={pdfDownloadHref} target="_blank" rel="noreferrer">
-            Download PDF
+            PDF
           </a>
         </div>
+      </div>
+
+      <div className="docs-proof-toolbar">
+        <a className="docs-proof-tool" href="#proof-snapshot">
+          <span className="docs-proof-tool-icon">S</span>
+          <span>Snapshot</span>
+        </a>
+        <a className="docs-proof-tool" href="#proof-settings">
+          <span className="docs-proof-tool-icon">A</span>
+          <span>Assignment</span>
+        </a>
+        <a className="docs-proof-tool" href="#proof-checkpoint">
+          <span className="docs-proof-tool-icon">C</span>
+          <span>Checkpoint</span>
+        </a>
+        <a className="docs-proof-tool" href="#proof-evidence">
+          <span className="docs-proof-tool-icon">E</span>
+          <span>Evidence</span>
+        </a>
+        <a className="docs-proof-tool" href="#proof-timeline">
+          <span className="docs-proof-tool-icon">T</span>
+          <span>Timeline</span>
+        </a>
+        <a className="docs-proof-tool" href="#proof-export">
+          <span className="docs-proof-tool-icon">X</span>
+          <span>Export</span>
+        </a>
       </div>
 
       <div className="workspace-grid spaced-lg">
@@ -557,7 +606,7 @@ export default function ProofPage({ params }: { params: { id: string } }) {
         </section>
 
         <aside className="stack sidebar-stack writer-sidebar">
-          <div className="card stack sidebar-panel">
+          <div className="card stack sidebar-panel" id="proof-snapshot">
             <h3>Proof snapshot</h3>
             <div className="writer-summary-grid writer-summary-grid-sidebar">
               <div className="writer-highlight">
@@ -583,7 +632,7 @@ export default function ProofPage({ params }: { params: { id: string } }) {
             </div>
           </div>
 
-          <div className="card stack sidebar-panel">
+          <div className="card stack sidebar-panel" id="proof-settings">
             <h3>Proof settings</h3>
 
             <div>
@@ -622,7 +671,7 @@ export default function ProofPage({ params }: { params: { id: string } }) {
             </label>
           </div>
 
-          <div className="card stack sidebar-panel">
+          <div className="card stack sidebar-panel" id="proof-checkpoint">
             <h3>Checkpoint capture</h3>
             <p className="muted">
               Keep the process light. Capture after real work, not every tiny edit.
@@ -685,7 +734,7 @@ export default function ProofPage({ params }: { params: { id: string } }) {
             </div>
           </div>
 
-          <div className="card stack sidebar-panel">
+          <div className="card stack sidebar-panel" id="proof-evidence">
             <h3>Evidence summary</h3>
 
             <div className="metric-grid">
@@ -717,7 +766,7 @@ export default function ProofPage({ params }: { params: { id: string } }) {
             </p>
           </div>
 
-          <div className="card stack sidebar-panel">
+          <div className="card stack sidebar-panel" id="proof-timeline">
             <h3>Checkpoint timeline</h3>
 
             {groupedCheckpoints.length === 0 ? (
@@ -775,7 +824,7 @@ export default function ProofPage({ params }: { params: { id: string } }) {
             )}
           </div>
 
-          <div className="card stack sidebar-panel">
+          <div className="card stack sidebar-panel" id="proof-export">
             <h3>Final export notes</h3>
             <p className="muted">
               These are for the end of the process, not every session.
