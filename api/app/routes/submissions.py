@@ -1,5 +1,7 @@
 import hashlib
+import html
 import json
+import re
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Response
@@ -27,6 +29,23 @@ from ..schemas import (
 from ..security import new_share_token
 
 router = APIRouter(prefix="/v1", tags=["submissions"])
+
+
+_BLOCK_TAG_RE = re.compile(r"</?(p|div|br|li|ul|ol|blockquote|h[1-6])[^>]*>", re.IGNORECASE)
+_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def _html_to_plain_text(value: str | None) -> str:
+    text = value or ""
+    if "<" not in text and ">" not in text:
+        return text.strip()
+
+    text = _BLOCK_TAG_RE.sub("\n", text)
+    text = _TAG_RE.sub("", text)
+    text = html.unescape(text)
+    text = text.replace("\xa0", " ")
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
 
 
 def _checkpoints_for_submission(db: Session, submission_id: str) -> list[SubmissionCheckpoint]:
@@ -60,6 +79,10 @@ def _assignment_prompt(sub: Submission) -> str | None:
 
 def _essay_text(sub: Submission) -> str | None:
     return decrypt_text(sub.essay_text_enc) if sub.essay_text_enc else None
+
+
+def _essay_plain_text(sub: Submission) -> str:
+    return _html_to_plain_text(_essay_text(sub))
 
 
 def _answers(sub: Submission) -> dict:
@@ -120,7 +143,7 @@ def _refresh_integrity_hash(db: Session, sub: Submission):
     answers = _answers(sub)
     checkpoints = _checkpoints_for_submission(db, sub.id)
 
-    meaningful_content = bool((essay_text or "").strip() or answers or checkpoints)
+    meaningful_content = bool(_html_to_plain_text(essay_text) or answers or checkpoints)
     if meaningful_content:
         canonical = _canonical_integrity_payload(db, sub, essay_text, answers)
         sub.integrity_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
@@ -277,11 +300,15 @@ def submission_guidance(
 
     previous_text = ""
     if rows:
-        previous_text = decrypt_text(rows[-1].draft_text_enc)
+        previous_text = _html_to_plain_text(decrypt_text(rows[-1].draft_text_enc))
     elif sub.essay_text_enc:
-        previous_text = decrypt_text(sub.essay_text_enc)
+        previous_text = _essay_plain_text(sub)
 
-    current_draft = payload.current_draft if payload.current_draft is not None else (_essay_text(sub) or "")
+    current_draft = (
+        _html_to_plain_text(payload.current_draft)
+        if payload.current_draft is not None
+        else _essay_plain_text(sub)
+    )
 
     guidance = build_guidance(
         assignment_prompt=_assignment_prompt(sub),
@@ -304,16 +331,17 @@ def create_checkpoint(
 ):
     sub = _owned_submission_or_404(db, sub_id, user.id)
 
-    current_text = (payload.draft_text or "").strip()
+    current_markup = (payload.draft_text or "").strip()
+    current_text = _html_to_plain_text(current_markup)
     if not current_text:
         raise HTTPException(status_code=400, detail="Checkpoint requires current draft text")
 
     previous_rows = _checkpoints_for_submission(db, sub.id)
     previous_text = ""
     if previous_rows:
-        previous_text = decrypt_text(previous_rows[-1].draft_text_enc)
+        previous_text = _html_to_plain_text(decrypt_text(previous_rows[-1].draft_text_enc))
     elif sub.essay_text_enc:
-        previous_text = decrypt_text(sub.essay_text_enc)
+        previous_text = _essay_plain_text(sub)
 
     guidance = build_guidance(
         assignment_prompt=_assignment_prompt(sub),
@@ -330,7 +358,7 @@ def create_checkpoint(
     row = SubmissionCheckpoint(
         submission_id=sub.id,
         source_tool=payload.source_tool,
-        draft_text_enc=encrypt_text(current_text),
+        draft_text_enc=encrypt_text(current_markup),
         note_enc=encrypt_text(payload.note) if payload.note else None,
         moment_prompt_enc=encrypt_text(guidance["dynamic_prompt"]) if guidance["dynamic_prompt"] else None,
         moment_answer_enc=encrypt_text(payload.moment_answer) if payload.moment_answer else None,
@@ -342,7 +370,7 @@ def create_checkpoint(
     )
 
     sub.assignment_mode = guidance["assignment_mode"]
-    sub.essay_text_enc = encrypt_text(current_text)
+    sub.essay_text_enc = encrypt_text(current_markup)
     sub.last_checkpoint_at = row.created_at
 
     db.add(row)

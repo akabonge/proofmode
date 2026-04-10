@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { API, apiFetch, seedCsrf } from "../../../lib/api";
 import { trackEvent } from "../../../lib/analytics";
+import RichTextEditor, { extractPlainTextFromHtml } from "../../../components/rich-text-editor";
 import {
   humanizeAssignmentMode,
   humanizeChangeType,
@@ -125,6 +126,19 @@ function isUnauthorized(message: string) {
   return /401|unauthorized/i.test(message);
 }
 
+function renderPreviewHtml(value: string) {
+  if (!value.trim()) {
+    return "<p></p>";
+  }
+  if (/<[a-z][\s\S]*>/i.test(value)) {
+    return value;
+  }
+  return value
+    .split(/\n{2,}/)
+    .map((paragraph) => `<p>${paragraph.replace(/\n/g, "<br />")}</p>`)
+    .join("");
+}
+
 export default function ProofPage({ params }: { params: { id: string } }) {
   const [submission, setSubmission] = useState<Submission | null>(null);
   const [summary, setSummary] = useState<EvidenceSummary | null>(null);
@@ -133,10 +147,10 @@ export default function ProofPage({ params }: { params: { id: string } }) {
 
   const [assignmentPrompt, setAssignmentPrompt] = useState("");
   const [dueAt, setDueAt] = useState("");
-  const [essayText, setEssayText] = useState("");
+  const [essayHtml, setEssayHtml] = useState("<p></p>");
   const [studentName, setStudentName] = useState("");
   const [includeNameOnPdf, setIncludeNameOnPdf] = useState(false);
-  const [sourceTool, setSourceTool] = useState("google_docs");
+  const [sourceTool, setSourceTool] = useState("proofmode");
   const [checkpointNote, setCheckpointNote] = useState("");
   const [momentAnswer, setMomentAnswer] = useState("");
   const [finalAnswers, setFinalAnswers] = useState<FinalAnswers>(DEFAULT_FINAL_ANSWERS);
@@ -158,6 +172,11 @@ export default function ProofPage({ params }: { params: { id: string } }) {
   }, [submission]);
 
   const groupedCheckpoints = useMemo(() => groupCheckpointsByDay(checkpoints), [checkpoints]);
+  const essayPlainText = useMemo(() => extractPlainTextFromHtml(essayHtml), [essayHtml]);
+  const wordCount = useMemo(() => {
+    if (!essayPlainText) return 0;
+    return essayPlainText.split(/\s+/).filter(Boolean).length;
+  }, [essayPlainText]);
 
   const lastCheckpointText = useMemo(() => {
     if (!summary?.last_checkpoint_at) return "No checkpoint captured yet.";
@@ -168,13 +187,13 @@ export default function ProofPage({ params }: { params: { id: string } }) {
     const days = daysBetweenNow(summary?.last_checkpoint_at);
 
     if (summary?.checkpoint_count === 0) {
-      return "After your first real writing session, paste the latest draft here and capture your first checkpoint.";
+      return "Draft directly in ProofMode, then capture your first checkpoint when the first real version is ready.";
     }
     if (days === null) {
       return "Come back after your next real writing session and capture another checkpoint.";
     }
     if (days <= 0) {
-      return "You already captured work today. Come back after your next writing session or when the draft materially changes.";
+      return "You already captured work today. Return after a later revision session or when the draft materially changes.";
     }
     if (days === 1) {
       return "It has been 1 day since your last checkpoint. Capture the next version after today's writing session.";
@@ -231,7 +250,7 @@ export default function ProofPage({ params }: { params: { id: string } }) {
 
       setAssignmentPrompt(sub.assignment_prompt || "");
       setDueAt(sub.due_at ? new Date(sub.due_at).toISOString().slice(0, 16) : "");
-      setEssayText(sub.essay_text || "");
+      setEssayHtml(renderPreviewHtml(sub.essay_text || ""));
       setStudentName(sub.student_name || "");
       setIncludeNameOnPdf(Boolean(sub.include_name_on_pdf));
       setFinalAnswers({
@@ -265,7 +284,7 @@ export default function ProofPage({ params }: { params: { id: string } }) {
 
     try {
       setSaving(true);
-      setMessage("Saving...");
+      setMessage("Saving draft...");
 
       await apiFetch(
         `/v1/submissions/${params.id}`,
@@ -274,7 +293,7 @@ export default function ProofPage({ params }: { params: { id: string } }) {
           body: JSON.stringify({
             assignment_prompt: assignmentPrompt,
             due_at: dueAt ? new Date(dueAt).toISOString() : null,
-            essay_text: essayText,
+            essay_text: essayHtml,
             student_name: studentName,
             include_name_on_pdf: includeNameOnPdf,
           }),
@@ -292,7 +311,7 @@ export default function ProofPage({ params }: { params: { id: string } }) {
       );
 
       await loadAll();
-      setMessage("Saved.");
+      setMessage("Draft saved.");
     } catch (err) {
       const message = getErrorMessage(err, "Could not save proof.");
 
@@ -308,8 +327,8 @@ export default function ProofPage({ params }: { params: { id: string } }) {
   }
 
   async function captureCheckpoint() {
-    if (!essayText.trim()) {
-      setMessage("Paste your current working draft before capturing a checkpoint.");
+    if (!essayPlainText.trim()) {
+      setMessage("Write some real draft content before capturing a checkpoint.");
       return;
     }
 
@@ -324,7 +343,7 @@ export default function ProofPage({ params }: { params: { id: string } }) {
           body: JSON.stringify({
             assignment_prompt: assignmentPrompt,
             due_at: dueAt ? new Date(dueAt).toISOString() : null,
-            essay_text: essayText,
+            essay_text: essayHtml,
             student_name: studentName,
             include_name_on_pdf: includeNameOnPdf,
           }),
@@ -338,7 +357,7 @@ export default function ProofPage({ params }: { params: { id: string } }) {
           method: "POST",
           body: JSON.stringify({
             source_tool: sourceTool,
-            draft_text: essayText,
+            draft_text: essayHtml,
             note: checkpointNote,
             moment_answer: momentAnswer,
           }),
@@ -414,7 +433,7 @@ export default function ProofPage({ params }: { params: { id: string } }) {
   }
 
   return (
-    <main className="shell">
+    <main className="shell writer-page">
       <div className="topnav">
         <div>
           <h2 className="page-title">{submission.title}</h2>
@@ -435,9 +454,9 @@ export default function ProofPage({ params }: { params: { id: string } }) {
       </div>
 
       <div className="card stack spaced-lg">
-        <div className="badge">This proof grows over time</div>
+        <div className="badge">Pilot writing workspace</div>
         <p className="muted">
-          Reopen this same page after later writing sessions. Each checkpoint becomes another dated entry in the timeline below.
+          This version keeps the writing experience front and center while capturing process signals in the side panel.
         </p>
         <div className="metric-grid">
           <div className="metric-card">
@@ -448,223 +467,54 @@ export default function ProofPage({ params }: { params: { id: string } }) {
             <div className="metric-label">Next best step</div>
             <div className="small muted">{nextStepText}</div>
           </div>
+          <div className="metric-card">
+            <div className="metric-label">Word count</div>
+            <div className="metric-value">{wordCount}</div>
+          </div>
+          <div className="metric-card">
+            <div className="metric-label">Evidence strength</div>
+            <div className="metric-value">{humanizeEvidenceStrength(summary.evidence_strength)}</div>
+          </div>
         </div>
       </div>
 
-      <div className="row">
+      <div className="workspace-grid">
         <div className="stack">
-          <div className="card stack">
-            <div className="badge">Write anywhere. Capture proof here.</div>
-            <p className="muted">
-              Keep using Google Docs or Word. After real writing sessions, come here to capture a lightweight checkpoint.
-            </p>
-
-            <div>
-              <label>Assignment prompt or rubric</label>
-              <textarea
-                rows={5}
-                value={assignmentPrompt}
-                onChange={(e) => setAssignmentPrompt(e.target.value)}
-                placeholder="Paste the assignment instructions here. ProofMode uses this to make guidance more specific to the work at hand."
-              />
-            </div>
-
-            <div className="grid-two">
+          <div className="card stack writer-card">
+            <div className="writer-header">
               <div>
-                <label>Due date (optional)</label>
-                <input
-                  type="datetime-local"
-                  value={dueAt}
-                  onChange={(e) => setDueAt(e.target.value)}
-                />
+                <h3>Draft editor</h3>
+                <p className="muted small">
+                  Write here directly. Formatting is intentionally familiar and lightweight for the pilot.
+                </p>
               </div>
-
-              <div>
-                <label>Student name (optional)</label>
-                <input
-                  value={studentName}
-                  onChange={(e) => setStudentName(e.target.value)}
-                  placeholder="Aloysious Kabonge"
-                />
+              <div className="chip-row">
+                <span className="chip">{humanizeAssignmentMode(submission.assignment_mode)}</span>
+                <span className="chip">{wordCount} words</span>
               </div>
             </div>
 
-            <label className="checkbox-row">
-              <input
-                type="checkbox"
-                checked={includeNameOnPdf}
-                onChange={(e) => setIncludeNameOnPdf(e.target.checked)}
-              />
-              <span>Include student name on exported PDFs</span>
-            </label>
+            <RichTextEditor
+              value={essayHtml}
+              onChange={setEssayHtml}
+              placeholder="Start your draft here. ProofMode will track your writing process over time while keeping the interface familiar and simple."
+            />
 
-            <div>
-              <label>Current working draft</label>
-              <textarea
-                rows={12}
-                value={essayText}
-                onChange={(e) => setEssayText(e.target.value)}
-                placeholder="Paste the latest version of your working draft here."
-              />
-            </div>
-
-            <div className="toolbar">
-              <button onClick={saveProof} disabled={saving}>
-                {saving ? "Saving..." : "Save proof"}
-              </button>
-              <button onClick={captureCheckpoint} disabled={capturing}>
-                {capturing ? "Capturing..." : "Capture checkpoint"}
-              </button>
+            <div className="writer-footer">
+              <div className="muted small">
+                The editor autosaves only when you click save. Capture checkpoints after meaningful writing sessions.
+              </div>
+              <div className="toolbar">
+                <button onClick={saveProof} disabled={saving}>
+                  {saving ? "Saving..." : "Save draft"}
+                </button>
+                <button onClick={captureCheckpoint} disabled={capturing}>
+                  {capturing ? "Capturing..." : "Capture checkpoint"}
+                </button>
+              </div>
             </div>
 
             {message && <div className="status-pill">{message}</div>}
-          </div>
-
-          <div className="card stack">
-            <h3>Final export notes</h3>
-            <p className="muted">
-              These are only for the end of the process. They are not meant to be filled out at every checkpoint.
-            </p>
-
-            <div>
-              <label>What changed most across the whole process?</label>
-              <textarea
-                rows={3}
-                value={finalAnswers.biggest_change}
-                onChange={(e) =>
-                  setFinalAnswers({ ...finalAnswers, biggest_change: e.target.value })
-                }
-                placeholder="Describe the biggest overall change from early drafts to the final version."
-              />
-            </div>
-
-            <div>
-              <label>What feedback, source, or input influenced the final version most?</label>
-              <textarea
-                rows={3}
-                value={finalAnswers.most_helpful_input}
-                onChange={(e) =>
-                  setFinalAnswers({ ...finalAnswers, most_helpful_input: e.target.value })
-                }
-                placeholder="Mention the most important source, reading, feedback, or conversation."
-              />
-            </div>
-
-            <div>
-              <label>Anything you want your instructor to notice about your process?</label>
-              <textarea
-                rows={3}
-                value={finalAnswers.instructor_context}
-                onChange={(e) =>
-                  setFinalAnswers({ ...finalAnswers, instructor_context: e.target.value })
-                }
-                placeholder="Optional context about effort, revision, or what changed over time."
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="stack">
-          <div className="card stack">
-            <h3>Checkpoint capture</h3>
-            <p className="muted">
-              The goal is to keep this lightweight. One note, one optional moment answer, then capture.
-            </p>
-
-            <div>
-              <label>Where did you work this session?</label>
-              <select value={sourceTool} onChange={(e) => setSourceTool(e.target.value)}>
-                <option value="google_docs">Google Docs</option>
-                <option value="word">Microsoft Word</option>
-                <option value="proofmode">ProofMode</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
-
-            <div>
-              <label>What changed in this session?</label>
-              <textarea
-                rows={3}
-                value={checkpointNote}
-                onChange={(e) => setCheckpointNote(e.target.value)}
-                placeholder={
-                  guidance?.suggested_checkpoint_note ||
-                  "Write one short sentence about what changed."
-                }
-              />
-            </div>
-
-            <div className="question-box">
-              <div className="question-meta">
-                <span className="status-pill">
-                  {humanizeAssignmentMode(guidance?.assignment_mode || submission.assignment_mode)}
-                </span>
-                <span className="status-pill">{humanizeStage(guidance?.stage || "starting")}</span>
-                <span className="status-pill">
-                  {humanizeChangeType(guidance?.detected_change || "first_capture")}
-                </span>
-              </div>
-
-              <strong>Moment question</strong>
-              <p className="muted">
-                {guidance?.dynamic_prompt ||
-                  "Refresh guidance after you paste your latest draft."}
-              </p>
-
-              <textarea
-                rows={3}
-                value={momentAnswer}
-                onChange={(e) => setMomentAnswer(e.target.value)}
-                placeholder="Optional. Answer this only if it helps explain the moment."
-              />
-
-              <button
-                className="secondary"
-                onClick={() => loadGuidance(essayText)}
-                disabled={refreshingGuidance}
-              >
-                {refreshingGuidance ? "Refreshing..." : "Refresh moment question"}
-              </button>
-            </div>
-
-            <button onClick={captureCheckpoint} disabled={capturing}>
-              {capturing ? "Capturing..." : "Capture proof-of-process checkpoint"}
-            </button>
-          </div>
-
-          <div className="card stack">
-            <h3>Evidence summary</h3>
-
-            <div className="metric-grid">
-              <div className="metric-card">
-                <div className="metric-label">Checkpoints</div>
-                <div className="metric-value">{summary.checkpoint_count}</div>
-              </div>
-              <div className="metric-card">
-                <div className="metric-label">Active days</div>
-                <div className="metric-value">{summary.active_days}</div>
-              </div>
-              <div className="metric-card">
-                <div className="metric-label">Timespan</div>
-                <div className="metric-value">{summary.timespan_days}d</div>
-              </div>
-              <div className="metric-card">
-                <div className="metric-label">Major revisions</div>
-                <div className="metric-value">{summary.major_revision_count}</div>
-              </div>
-            </div>
-
-            <div className="status-row">
-              <span className="muted">Evidence strength:</span>
-              <span className="status-pill">
-                {humanizeEvidenceStrength(summary.evidence_strength)}
-              </span>
-            </div>
-
-            <p className="muted small">
-              This is not an AI detector. It is a process record built from timestamped checkpoints,
-              revision deltas, and context captured over time.
-            </p>
           </div>
 
           <div className="card stack">
@@ -724,11 +574,186 @@ export default function ProofPage({ params }: { params: { id: string } }) {
               </div>
             )}
           </div>
+        </div>
+
+        <div className="stack sidebar-stack">
+          <div className="card stack">
+            <h3>Proof settings</h3>
+
+            <div>
+              <label>Assignment prompt or rubric</label>
+              <textarea
+                rows={5}
+                value={assignmentPrompt}
+                onChange={(e) => setAssignmentPrompt(e.target.value)}
+                placeholder="Paste the assignment instructions here."
+              />
+            </div>
+
+            <div className="grid-two">
+              <div>
+                <label>Due date</label>
+                <input type="datetime-local" value={dueAt} onChange={(e) => setDueAt(e.target.value)} />
+              </div>
+
+              <div>
+                <label>Student name</label>
+                <input
+                  value={studentName}
+                  onChange={(e) => setStudentName(e.target.value)}
+                  placeholder="Aloysious Kabonge"
+                />
+              </div>
+            </div>
+
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={includeNameOnPdf}
+                onChange={(e) => setIncludeNameOnPdf(e.target.checked)}
+              />
+              <span>Include student name on exported PDFs</span>
+            </label>
+          </div>
+
+          <div className="card stack">
+            <h3>Checkpoint capture</h3>
+            <p className="muted">
+              Keep the process light. Capture after real work, not every tiny edit.
+            </p>
+
+            <div>
+              <label>Where did you work this session?</label>
+              <select value={sourceTool} onChange={(e) => setSourceTool(e.target.value)}>
+                <option value="proofmode">ProofMode editor</option>
+                <option value="google_docs">Google Docs</option>
+                <option value="word">Microsoft Word</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+
+            <div>
+              <label>What changed in this session?</label>
+              <textarea
+                rows={3}
+                value={checkpointNote}
+                onChange={(e) => setCheckpointNote(e.target.value)}
+                placeholder={guidance?.suggested_checkpoint_note || "Write one short sentence about what changed."}
+              />
+            </div>
+
+            <div className="question-box">
+              <div className="question-meta">
+                <span className="status-pill">
+                  {humanizeAssignmentMode(guidance?.assignment_mode || submission.assignment_mode)}
+                </span>
+                <span className="status-pill">{humanizeStage(guidance?.stage || "starting")}</span>
+                <span className="status-pill">
+                  {humanizeChangeType(guidance?.detected_change || "first_capture")}
+                </span>
+              </div>
+
+              <strong>Moment question</strong>
+              <p className="muted">
+                {guidance?.dynamic_prompt || "Refresh guidance after your draft starts taking shape."}
+              </p>
+
+              <textarea
+                rows={3}
+                value={momentAnswer}
+                onChange={(e) => setMomentAnswer(e.target.value)}
+                placeholder="Optional. Use this when you want to explain a meaningful decision or revision."
+              />
+
+              <button
+                className="secondary"
+                onClick={() => loadGuidance(essayHtml)}
+                disabled={refreshingGuidance}
+              >
+                {refreshingGuidance ? "Refreshing..." : "Refresh moment question"}
+              </button>
+            </div>
+          </div>
+
+          <div className="card stack">
+            <h3>Evidence summary</h3>
+
+            <div className="metric-grid">
+              <div className="metric-card">
+                <div className="metric-label">Checkpoints</div>
+                <div className="metric-value">{summary.checkpoint_count}</div>
+              </div>
+              <div className="metric-card">
+                <div className="metric-label">Active days</div>
+                <div className="metric-value">{summary.active_days}</div>
+              </div>
+              <div className="metric-card">
+                <div className="metric-label">Timespan</div>
+                <div className="metric-value">{summary.timespan_days}d</div>
+              </div>
+              <div className="metric-card">
+                <div className="metric-label">Major revisions</div>
+                <div className="metric-value">{summary.major_revision_count}</div>
+              </div>
+            </div>
+
+            <div className="status-row">
+              <span className="muted">Evidence strength:</span>
+              <span className="status-pill">{humanizeEvidenceStrength(summary.evidence_strength)}</span>
+            </div>
+
+            <p className="muted small">
+              ProofMode is not trying to detect AI. It records how the writing evolved across real sessions.
+            </p>
+          </div>
+
+          <div className="card stack">
+            <h3>Final export notes</h3>
+            <p className="muted">
+              These are for the end of the process, not every session.
+            </p>
+
+            <div>
+              <label>What changed most across the whole process?</label>
+              <textarea
+                rows={3}
+                value={finalAnswers.biggest_change}
+                onChange={(e) =>
+                  setFinalAnswers({ ...finalAnswers, biggest_change: e.target.value })
+                }
+                placeholder="Describe the biggest overall change from early drafts to the final version."
+              />
+            </div>
+
+            <div>
+              <label>What feedback, source, or input influenced the final version most?</label>
+              <textarea
+                rows={3}
+                value={finalAnswers.most_helpful_input}
+                onChange={(e) =>
+                  setFinalAnswers({ ...finalAnswers, most_helpful_input: e.target.value })
+                }
+                placeholder="Mention the most important source, reading, feedback, or conversation."
+              />
+            </div>
+
+            <div>
+              <label>Anything you want your instructor to notice about your process?</label>
+              <textarea
+                rows={3}
+                value={finalAnswers.instructor_context}
+                onChange={(e) =>
+                  setFinalAnswers({ ...finalAnswers, instructor_context: e.target.value })
+                }
+                placeholder="Optional context about effort, revision, or what changed over time."
+              />
+            </div>
+          </div>
 
           <div className="card stack">
             <h3>Sharing and export</h3>
             <p className="muted">
-              Private by default. Only enable sharing when you are ready to submit or show the proof.
+              Private by default. Share only when you are ready to submit or review.
             </p>
 
             <div className="toolbar">

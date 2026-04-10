@@ -89,6 +89,19 @@ function groupCheckpointsByDay(checkpoints: SharedCheckpoint[]) {
     });
 }
 
+function renderPreviewHtml(value: string) {
+  if (!value.trim()) {
+    return "<p></p>";
+  }
+  if (/<[a-z][\s\S]*>/i.test(value)) {
+    return value;
+  }
+  return value
+    .split(/\n{2,}/)
+    .map((paragraph) => `<p>${paragraph.replace(/\n/g, "<br />")}</p>`)
+    .join("");
+}
+
 export default function SharedProofPage({ params }: { params: { token: string } }) {
   const [proof, setProof] = useState<SharedProof | null>(null);
   const [loading, setLoading] = useState(true);
@@ -183,7 +196,10 @@ export default function SharedProofPage({ params }: { params: { token: string } 
           {proof.essay_text ? (
             <div className="card stack">
               <h3>Current draft snapshot</h3>
-              <textarea rows={16} value={proof.essay_text} readOnly />
+              <div
+                className="rendered-rich-text"
+                dangerouslySetInnerHTML={{ __html: renderPreviewHtml(proof.essay_text) }}
+              />
             </div>
           ) : null}
 
