@@ -849,14 +849,6 @@ export default function ProofPage({ params }: { params: { id: string } }) {
               {humanizeAssignmentMode(submission.assignment_mode)}
               {submission.course ? ` - ${submission.course}` : ""}
             </div>
-            <div className="docs-menu-row">
-              <button type="button" className="docs-menu-button">File</button>
-              <button type="button" className="docs-menu-button">Edit</button>
-              <button type="button" className="docs-menu-button">Insert</button>
-              <button type="button" className="docs-menu-button">Format</button>
-              <button type="button" className="docs-menu-button">Tools</button>
-              <button type="button" className="docs-menu-button">ProofMode</button>
-            </div>
           </div>
         </div>
 

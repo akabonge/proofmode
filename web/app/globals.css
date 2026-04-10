@@ -816,7 +816,7 @@ select {
 }
 
 .writer-page.shell {
-  width: min(1580px, calc(100% - 28px));
+  width: min(1700px, calc(100% - 20px));
   padding-top: 20px;
 }
 
@@ -860,27 +860,6 @@ select {
   flex-direction: column;
   gap: 8px;
   min-width: 0;
-}
-
-.docs-menu-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px;
-}
-
-.docs-menu-button {
-  background: transparent;
-  border: 0;
-  box-shadow: none;
-  padding: 6px 10px;
-  border-radius: 10px;
-  color: #d9e1ff;
-  font-weight: 600;
-}
-
-.docs-menu-button:hover {
-  transform: none;
-  background: rgba(126, 142, 255, 0.12);
 }
 
 .docs-actions {
@@ -1040,20 +1019,20 @@ select {
 
 .writer-canvas-wrap {
   flex: 1 1 auto;
-  padding: 30px clamp(18px, 3vw, 40px) 42px;
+  padding: 22px clamp(10px, 2vw, 24px) 30px;
   background:
     linear-gradient(180deg, rgba(245, 247, 255, 0.06), rgba(245, 247, 255, 0)),
     linear-gradient(180deg, rgba(7, 14, 35, 0.92), rgba(9, 15, 34, 0.98));
 }
 
 .writer-canvas {
-  width: min(100%, 980px);
-  min-height: max(1080px, calc(100vh - 220px));
+  width: min(100%, 1180px);
+  min-height: max(1180px, calc(100vh - 170px));
   margin: 0 auto;
   background: #fcfdff;
   color: #16213f;
   border-radius: 10px;
-  padding: 72px clamp(28px, 5vw, 86px);
+  padding: 76px clamp(34px, 5vw, 96px);
   outline: none;
   box-shadow:
     0 42px 90px rgba(0, 0, 0, 0.34),
@@ -1174,7 +1153,7 @@ select {
 
 @media (max-width: 760px) {
   .writer-page.shell {
-    width: min(100% - 18px, 1580px);
+    width: min(100% - 14px, 1700px);
   }
 
   .docs-topbar {
