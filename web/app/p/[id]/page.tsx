@@ -82,6 +82,15 @@ type SaveSnapshot = {
   finalAnswers: FinalAnswers;
 };
 
+type ProofPanelKey =
+  | "snapshot"
+  | "settings"
+  | "checkpoint"
+  | "evidence"
+  | "timeline"
+  | "export"
+  | null;
+
 const DEFAULT_FINAL_ANSWERS: FinalAnswers = {
   biggest_change: "",
   most_helpful_input: "",
@@ -175,6 +184,7 @@ export default function ProofPage({ params }: { params: { id: string } }) {
   const [message, setMessage] = useState("");
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [loadedSnapshot, setLoadedSnapshot] = useState("");
+  const [activePanel, setActivePanel] = useState<ProofPanelKey>("snapshot");
 
   const pdfDownloadHref = useMemo(() => {
     return submission ? `${API}/v1/submissions/${submission.id}/pdf` : "#";
@@ -483,132 +493,18 @@ export default function ProofPage({ params }: { params: { id: string } }) {
     }
   }
 
-  if (!submission || !summary) {
-    return (
-      <main className="shell">
-        <div className="card stack">
-          <h3>Loading proof...</h3>
-          {message && <div className="status-pill">{message}</div>}
-        </div>
-      </main>
-    );
-  }
-
-  return (
-    <main className="shell writer-page">
-      <div className="docs-topbar">
-        <div className="docs-topbar-main">
-          <div className="docs-brand-mark" aria-hidden="true">
-            P
-          </div>
-          <div className="docs-title-block">
-            <h2 className="page-title">{submission.title}</h2>
-            <div className="subtitle">
-              {humanizeAssignmentMode(submission.assignment_mode)}
-              {submission.course ? ` - ${submission.course}` : ""}
+  function renderActivePanel() {
+    switch (activePanel) {
+      case "snapshot":
+        return (
+          <div className="card stack docs-proof-panel">
+            <div className="docs-proof-panel-head">
+              <h3>Proof snapshot</h3>
+              <button type="button" className="docs-close-button" onClick={() => setActivePanel(null)}>
+                Close
+              </button>
             </div>
-            <div className="docs-menu-row">
-              <button type="button" className="docs-menu-button">File</button>
-              <button type="button" className="docs-menu-button">Edit</button>
-              <button type="button" className="docs-menu-button">Insert</button>
-              <button type="button" className="docs-menu-button">Format</button>
-              <button type="button" className="docs-menu-button">Tools</button>
-              <button type="button" className="docs-menu-button">ProofMode</button>
-            </div>
-          </div>
-        </div>
-
-        <div className="docs-actions">
-          <a className="btn secondary" href="#proof-snapshot">
-            Snapshot
-          </a>
-          <button onClick={saveProof} disabled={saving}>
-            {saving ? "Saving..." : "Save"}
-          </button>
-          <button className="secondary" onClick={captureCheckpoint} disabled={capturing}>
-            {capturing ? "Capturing..." : "Checkpoint"}
-          </button>
-          <a className="btn secondary" href="/dashboard">
-            Back
-          </a>
-          <a className="btn secondary" href={pdfDownloadHref} target="_blank" rel="noreferrer">
-            PDF
-          </a>
-        </div>
-      </div>
-
-      <div className="docs-proof-toolbar">
-        <a className="docs-proof-tool" href="#proof-snapshot">
-          <span className="docs-proof-tool-icon">S</span>
-          <span>Snapshot</span>
-        </a>
-        <a className="docs-proof-tool" href="#proof-settings">
-          <span className="docs-proof-tool-icon">A</span>
-          <span>Assignment</span>
-        </a>
-        <a className="docs-proof-tool" href="#proof-checkpoint">
-          <span className="docs-proof-tool-icon">C</span>
-          <span>Checkpoint</span>
-        </a>
-        <a className="docs-proof-tool" href="#proof-evidence">
-          <span className="docs-proof-tool-icon">E</span>
-          <span>Evidence</span>
-        </a>
-        <a className="docs-proof-tool" href="#proof-timeline">
-          <span className="docs-proof-tool-icon">T</span>
-          <span>Timeline</span>
-        </a>
-        <a className="docs-proof-tool" href="#proof-export">
-          <span className="docs-proof-tool-icon">X</span>
-          <span>Export</span>
-        </a>
-      </div>
-
-      <div className="workspace-grid spaced-lg">
-        <section className="writer-main-column">
-          <div className="card stack writer-card writer-stage">
-            <div className="writer-header writer-header-compact">
-              <div>
-                <div className="badge">Pilot writing workspace</div>
-                <p className="muted small writer-intro">
-                  A familiar document view for the pilot. Use <strong>Ctrl/Cmd + S</strong> to save, then capture checkpoints from the sidebar after meaningful writing sessions.
-                </p>
-              </div>
-              <div className="chip-row">
-                <span className="chip">{humanizeAssignmentMode(submission.assignment_mode)}</span>
-                <span className="chip">{wordCount} words</span>
-                <span className="chip">{hasUnsavedChanges ? "Unsaved changes" : "Saved"}</span>
-              </div>
-            </div>
-
-            <RichTextEditor
-              value={essayHtml}
-              onChange={setEssayHtml}
-              placeholder="Start your draft here. ProofMode will keep the writing area familiar while recording your process over time."
-            />
-
-            <div className="writer-footer">
-              <div className="writer-status-copy">
-                <div className="muted small">{saveStatusText}</div>
-                <div className="muted small">
-                  Keep writing in the document, then use the right sidebar for process notes, evidence, and sharing.
-                </div>
-              </div>
-              <div className="toolbar">
-                <button onClick={saveProof} disabled={saving}>
-                  {saving ? "Saving..." : "Save draft"}
-                </button>
-              </div>
-            </div>
-
-            {message && <div className="writer-message-bar">{message}</div>}
-          </div>
-        </section>
-
-        <aside className="stack sidebar-stack writer-sidebar">
-          <div className="card stack sidebar-panel" id="proof-snapshot">
-            <h3>Proof snapshot</h3>
-            <div className="writer-summary-grid writer-summary-grid-sidebar">
+            <div className="writer-summary-grid">
               <div className="writer-highlight">
                 <div className="metric-label">Save status</div>
                 <div className="small muted">{saveStatusText}</div>
@@ -631,10 +527,16 @@ export default function ProofPage({ params }: { params: { id: string } }) {
               </div>
             </div>
           </div>
-
-          <div className="card stack sidebar-panel" id="proof-settings">
-            <h3>Proof settings</h3>
-
+        );
+      case "settings":
+        return (
+          <div className="card stack docs-proof-panel">
+            <div className="docs-proof-panel-head">
+              <h3>Proof settings</h3>
+              <button type="button" className="docs-close-button" onClick={() => setActivePanel(null)}>
+                Close
+              </button>
+            </div>
             <div>
               <label>Assignment prompt or rubric</label>
               <textarea
@@ -670,9 +572,16 @@ export default function ProofPage({ params }: { params: { id: string } }) {
               <span>Include student name on exported PDFs</span>
             </label>
           </div>
-
-          <div className="card stack sidebar-panel" id="proof-checkpoint">
-            <h3>Checkpoint capture</h3>
+        );
+      case "checkpoint":
+        return (
+          <div className="card stack docs-proof-panel">
+            <div className="docs-proof-panel-head">
+              <h3>Checkpoint capture</h3>
+              <button type="button" className="docs-close-button" onClick={() => setActivePanel(null)}>
+                Close
+              </button>
+            </div>
             <p className="muted">
               Keep the process light. Capture after real work, not every tiny edit.
             </p>
@@ -720,23 +629,31 @@ export default function ProofPage({ params }: { params: { id: string } }) {
                 placeholder="Optional. Use this when you want to explain a meaningful decision or revision."
               />
 
-              <button
-                className="secondary"
-                onClick={() => loadGuidance(essayHtml)}
-                disabled={refreshingGuidance}
-              >
-                {refreshingGuidance ? "Refreshing..." : "Refresh moment question"}
-              </button>
+              <div className="toolbar">
+                <button
+                  className="secondary"
+                  onClick={() => loadGuidance(essayHtml)}
+                  disabled={refreshingGuidance}
+                >
+                  {refreshingGuidance ? "Refreshing..." : "Refresh moment question"}
+                </button>
 
-              <button onClick={captureCheckpoint} disabled={capturing}>
-                {capturing ? "Capturing..." : "Capture checkpoint"}
-              </button>
+                <button onClick={captureCheckpoint} disabled={capturing}>
+                  {capturing ? "Capturing..." : "Capture checkpoint"}
+                </button>
+              </div>
             </div>
           </div>
-
-          <div className="card stack sidebar-panel" id="proof-evidence">
-            <h3>Evidence summary</h3>
-
+        );
+      case "evidence":
+        return (
+          <div className="card stack docs-proof-panel">
+            <div className="docs-proof-panel-head">
+              <h3>Evidence summary</h3>
+              <button type="button" className="docs-close-button" onClick={() => setActivePanel(null)}>
+                Close
+              </button>
+            </div>
             <div className="metric-grid">
               <div className="metric-card">
                 <div className="metric-label">Checkpoints</div>
@@ -765,10 +682,16 @@ export default function ProofPage({ params }: { params: { id: string } }) {
               ProofMode is not trying to detect AI. It records how the writing evolved across real sessions.
             </p>
           </div>
-
-          <div className="card stack sidebar-panel" id="proof-timeline">
-            <h3>Checkpoint timeline</h3>
-
+        );
+      case "timeline":
+        return (
+          <div className="card stack docs-proof-panel">
+            <div className="docs-proof-panel-head">
+              <h3>Checkpoint timeline</h3>
+              <button type="button" className="docs-close-button" onClick={() => setActivePanel(null)}>
+                Close
+              </button>
+            </div>
             {groupedCheckpoints.length === 0 ? (
               <p className="muted">
                 No checkpoints yet. Capture your first one after a real writing session.
@@ -778,7 +701,6 @@ export default function ProofPage({ params }: { params: { id: string } }) {
                 {groupedCheckpoints.map((group) => (
                   <div key={group.key} className="timeline-day-group">
                     <div className="timeline-day-heading">{group.label}</div>
-
                     <div className="timeline">
                       {group.items.map((checkpoint) => (
                         <div key={checkpoint.id} className="timeline-item">
@@ -823,11 +745,18 @@ export default function ProofPage({ params }: { params: { id: string } }) {
               </div>
             )}
           </div>
-
-          <div className="card stack sidebar-panel" id="proof-export">
-            <h3>Final export notes</h3>
+        );
+      case "export":
+        return (
+          <div className="card stack docs-proof-panel">
+            <div className="docs-proof-panel-head">
+              <h3>Export and sharing</h3>
+              <button type="button" className="docs-close-button" onClick={() => setActivePanel(null)}>
+                Close
+              </button>
+            </div>
             <p className="muted">
-              These are for the end of the process, not every session.
+              These notes are for the end of the process, not every session.
             </p>
 
             <div>
@@ -865,13 +794,6 @@ export default function ProofPage({ params }: { params: { id: string } }) {
                 placeholder="Optional context about effort, revision, or what changed over time."
               />
             </div>
-          </div>
-
-          <div className="card stack sidebar-panel">
-            <h3>Sharing and export</h3>
-            <p className="muted">
-              Private by default. Share only when you are ready to submit or review.
-            </p>
 
             <div className="toolbar">
               <button className="secondary" onClick={() => setVisibility("private")}>
@@ -897,7 +819,156 @@ export default function ProofPage({ params }: { params: { id: string } }) {
               </div>
             )}
           </div>
-        </aside>
+        );
+      default:
+        return null;
+    }
+  }
+
+  if (!submission || !summary) {
+    return (
+      <main className="shell">
+        <div className="card stack">
+          <h3>Loading proof...</h3>
+          {message && <div className="status-pill">{message}</div>}
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <main className="shell writer-page">
+      <div className="docs-topbar">
+        <div className="docs-topbar-main">
+          <div className="docs-brand-mark" aria-hidden="true">
+            P
+          </div>
+          <div className="docs-title-block">
+            <h2 className="page-title">{submission.title}</h2>
+            <div className="subtitle">
+              {humanizeAssignmentMode(submission.assignment_mode)}
+              {submission.course ? ` - ${submission.course}` : ""}
+            </div>
+            <div className="docs-menu-row">
+              <button type="button" className="docs-menu-button">File</button>
+              <button type="button" className="docs-menu-button">Edit</button>
+              <button type="button" className="docs-menu-button">Insert</button>
+              <button type="button" className="docs-menu-button">Format</button>
+              <button type="button" className="docs-menu-button">Tools</button>
+              <button type="button" className="docs-menu-button">ProofMode</button>
+            </div>
+          </div>
+        </div>
+
+        <div className="docs-actions">
+          <button onClick={saveProof} disabled={saving}>
+            {saving ? "Saving..." : "Save"}
+          </button>
+          <button className="secondary" onClick={captureCheckpoint} disabled={capturing}>
+            {capturing ? "Capturing..." : "Checkpoint"}
+          </button>
+          <a className="btn secondary" href="/dashboard">
+            Back
+          </a>
+          <a className="btn secondary" href={pdfDownloadHref} target="_blank" rel="noreferrer">
+            PDF
+          </a>
+        </div>
+      </div>
+
+      <div className="docs-proof-toolbar">
+        <button
+          type="button"
+          className={`docs-proof-tool${activePanel === "snapshot" ? " active" : ""}`}
+          onClick={() => setActivePanel(activePanel === "snapshot" ? null : "snapshot")}
+        >
+          <span className="docs-proof-tool-icon">S</span>
+          <span>Snapshot</span>
+        </button>
+        <button
+          type="button"
+          className={`docs-proof-tool${activePanel === "settings" ? " active" : ""}`}
+          onClick={() => setActivePanel(activePanel === "settings" ? null : "settings")}
+        >
+          <span className="docs-proof-tool-icon">A</span>
+          <span>Assignment</span>
+        </button>
+        <button
+          type="button"
+          className={`docs-proof-tool${activePanel === "checkpoint" ? " active" : ""}`}
+          onClick={() => setActivePanel(activePanel === "checkpoint" ? null : "checkpoint")}
+        >
+          <span className="docs-proof-tool-icon">C</span>
+          <span>Checkpoint</span>
+        </button>
+        <button
+          type="button"
+          className={`docs-proof-tool${activePanel === "evidence" ? " active" : ""}`}
+          onClick={() => setActivePanel(activePanel === "evidence" ? null : "evidence")}
+        >
+          <span className="docs-proof-tool-icon">E</span>
+          <span>Evidence</span>
+        </button>
+        <button
+          type="button"
+          className={`docs-proof-tool${activePanel === "timeline" ? " active" : ""}`}
+          onClick={() => setActivePanel(activePanel === "timeline" ? null : "timeline")}
+        >
+          <span className="docs-proof-tool-icon">T</span>
+          <span>Timeline</span>
+        </button>
+        <button
+          type="button"
+          className={`docs-proof-tool${activePanel === "export" ? " active" : ""}`}
+          onClick={() => setActivePanel(activePanel === "export" ? null : "export")}
+        >
+          <span className="docs-proof-tool-icon">X</span>
+          <span>Export</span>
+        </button>
+      </div>
+
+      {renderActivePanel()}
+
+      <div className="spaced-lg">
+        <section className="writer-main-column">
+          <div className="card stack writer-card writer-stage">
+            <div className="writer-header writer-header-compact">
+              <div>
+                <div className="badge">Pilot writing workspace</div>
+                <p className="muted small writer-intro">
+                  A familiar document view for the pilot. Use <strong>Ctrl/Cmd + S</strong> to save, then open ProofMode tools from the top bar when you need them.
+                </p>
+              </div>
+              <div className="chip-row">
+                <span className="chip">{humanizeAssignmentMode(submission.assignment_mode)}</span>
+                <span className="chip">{wordCount} words</span>
+                <span className="chip">{hasUnsavedChanges ? "Unsaved changes" : "Saved"}</span>
+              </div>
+            </div>
+
+            <RichTextEditor
+              value={essayHtml}
+              onChange={setEssayHtml}
+              placeholder="Start your draft here. ProofMode will keep the writing area familiar while recording your process over time."
+            />
+
+            <div className="writer-footer">
+              <div className="writer-status-copy">
+                <div className="muted small">{saveStatusText}</div>
+                <div className="muted small">
+                  Keep writing in the document, then open the top ProofMode tools whenever you need process notes, evidence, or sharing controls.
+                </div>
+              </div>
+              <div className="toolbar">
+                <button onClick={saveProof} disabled={saving}>
+                  {saving ? "Saving..." : "Save draft"}
+                </button>
+              </div>
+            </div>
+
+            {message && <div className="writer-message-bar">{message}</div>}
+          </div>
+        </section>
       </div>
     </main>
   );
