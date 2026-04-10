@@ -31,6 +31,7 @@ type AnalyticsDashboard = {
   kpis: {
     total_users: number;
     new_users_7d: number;
+    active_users_7d: number;
     total_submissions: number;
     total_checkpoints: number;
     shared_proofs: number;
@@ -66,6 +67,15 @@ type AnalyticsDashboard = {
     session_id?: string | null;
     metadata?: Record<string, string | number | boolean | null>;
   }>;
+  recent_users: Array<{
+    email: string;
+    role: string;
+    created_at: string;
+    last_seen_at?: string | null;
+    submissions_created: number;
+    checkpoints_captured: number;
+    is_recently_active: boolean;
+  }>;
 };
 
 function getErrorMessage(err: unknown, fallback: string) {
@@ -96,6 +106,11 @@ function formatRole(role?: string) {
   return role.charAt(0).toUpperCase() + role.slice(1);
 }
 
+function formatLastSeen(value?: string | null) {
+  if (!value) return "No tracked activity yet";
+  return new Date(value).toLocaleString();
+}
+
 function AdminAnalyticsPanel({ analytics }: { analytics: AnalyticsDashboard }) {
   const maxFunnel = Math.max(...analytics.funnel.map((step) => step.value), 1);
   const maxDaily = Math.max(
@@ -118,14 +133,14 @@ function AdminAnalyticsPanel({ analytics }: { analytics: AnalyticsDashboard }) {
       hint: "Created in the last 7 days",
     },
     {
+      label: "Active users",
+      value: analytics.kpis.active_users_7d,
+      hint: "Logged in or worked in the last 7 days",
+    },
+    {
       label: "Proofs created",
       value: analytics.kpis.total_submissions,
       hint: `${analytics.kpis.shared_proofs} currently shared`,
-    },
-    {
-      label: "Checkpoints captured",
-      value: analytics.kpis.total_checkpoints,
-      hint: `${analytics.kpis.active_writers_30d} active writers in the last 30 days`,
     },
   ];
 
@@ -151,6 +166,7 @@ function AdminAnalyticsPanel({ analytics }: { analytics: AnalyticsDashboard }) {
 
         <div className="admin-inline-meta">
           <span className="status-pill">{analytics.kpis.total_users} total users</span>
+          <span className="status-pill">{analytics.kpis.active_writers_30d} active writers (30d)</span>
           <span className="status-pill">{analytics.kpis.total_events} tracked product events</span>
           <span className="status-pill">
             Refreshed {new Date(analytics.generated_at).toLocaleString()}
@@ -244,6 +260,45 @@ function AdminAnalyticsPanel({ analytics }: { analytics: AnalyticsDashboard }) {
           <div className="card stack">
             <div className="section-head">
               <div>
+                <h3>User overview</h3>
+                <p className="muted small">
+                  This is the account list behind the totals above. It shows who has signed up and who has
+                  actually used the product recently.
+                </p>
+              </div>
+            </div>
+
+            {analytics.recent_users.length === 0 ? (
+              <p className="muted">No users found.</p>
+            ) : (
+              <div className="user-table">
+                <div className="user-table-head">
+                  <span>User</span>
+                  <span>Role</span>
+                  <span>Created</span>
+                  <span>Last seen</span>
+                  <span>Proofs</span>
+                  <span>Checkpoints</span>
+                </div>
+                {analytics.recent_users.map((userRow) => (
+                  <div key={userRow.email} className="user-table-row">
+                    <span>{userRow.email}</span>
+                    <span>
+                      <span className="status-pill">{formatRole(userRow.role)}</span>
+                    </span>
+                    <span>{new Date(userRow.created_at).toLocaleDateString()}</span>
+                    <span>{formatLastSeen(userRow.last_seen_at)}</span>
+                    <span>{userRow.submissions_created}</span>
+                    <span>{userRow.checkpoints_captured}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="card stack">
+            <div className="section-head">
+              <div>
                 <h3>Top product surfaces</h3>
                 <p className="muted small">Most visited pages in the last 30 days.</p>
               </div>
@@ -306,9 +361,9 @@ function AdminAnalyticsPanel({ analytics }: { analytics: AnalyticsDashboard }) {
       <div className="card stack">
         <div className="section-head">
           <div>
-            <h3>Recent activity feed</h3>
+            <h3>Latest tracked events</h3>
             <p className="muted small">
-              A human-readable audit trail of recent product activity from real users.
+              This is a recent event feed, not a complete list of every account in the database.
             </p>
           </div>
         </div>

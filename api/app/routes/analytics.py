@@ -17,6 +17,7 @@ from ..schemas import (
     AnalyticsKpiOut,
     AnalyticsPageViewOut,
     AnalyticsRecentEventOut,
+    AnalyticsUserOverviewOut,
 )
 
 router = APIRouter(prefix="/v1", tags=["analytics"])
@@ -94,6 +95,26 @@ def get_admin_analytics(
         for (owner_id,) in (
             db.query(Submission.owner_id)
             .filter(Submission.updated_at >= thirty_days_ago)
+            .distinct()
+            .all()
+        )
+        if owner_id
+    }
+    active_users_7d = {
+        user_id
+        for (user_id,) in (
+            db.query(AnalyticsEvent.user_id)
+            .filter(AnalyticsEvent.created_at >= seven_days_ago, AnalyticsEvent.user_id.isnot(None))
+            .distinct()
+            .all()
+        )
+        if user_id
+    }
+    submission_users_7d = {
+        owner_id
+        for (owner_id,) in (
+            db.query(Submission.owner_id)
+            .filter(Submission.updated_at >= seven_days_ago)
             .distinct()
             .all()
         )
@@ -232,12 +253,53 @@ def get_admin_analytics(
         AnalyticsPageViewOut(path=path, views=views)
         for path, views in recent_page_views
     ]
+    user_submission_counts = {
+        user_id: count
+        for user_id, count in (
+            db.query(Submission.owner_id, func.count(Submission.id))
+            .group_by(Submission.owner_id)
+            .all()
+        )
+    }
+    user_checkpoint_counts = {
+        user_id: count
+        for user_id, count in (
+            db.query(Submission.owner_id, func.count(SubmissionCheckpoint.id))
+            .join(SubmissionCheckpoint, SubmissionCheckpoint.submission_id == Submission.id)
+            .group_by(Submission.owner_id)
+            .all()
+        )
+    }
+    user_last_seen = {
+        user_id: last_seen
+        for user_id, last_seen in (
+            db.query(AnalyticsEvent.user_id, func.max(AnalyticsEvent.created_at))
+            .filter(AnalyticsEvent.user_id.isnot(None))
+            .group_by(AnalyticsEvent.user_id)
+            .all()
+        )
+        if user_id
+    }
+    users = db.query(User).order_by(User.created_at.desc()).limit(25).all()
+    recent_users = [
+        AnalyticsUserOverviewOut(
+            email=user.email,
+            role=user.role,
+            created_at=user.created_at,
+            last_seen_at=user_last_seen.get(user.id),
+            submissions_created=int(user_submission_counts.get(user.id, 0)),
+            checkpoints_captured=int(user_checkpoint_counts.get(user.id, 0)),
+            is_recently_active=user.id in (event_active_users | submission_active_users),
+        )
+        for user in users
+    ]
 
     return AnalyticsDashboardOut(
         generated_at=now,
         kpis=AnalyticsKpiOut(
             total_users=total_users,
             new_users_7d=new_users_7d,
+            active_users_7d=len(active_users_7d | submission_users_7d),
             total_submissions=total_submissions,
             total_checkpoints=total_checkpoints,
             shared_proofs=shared_proofs,
@@ -253,4 +315,5 @@ def get_admin_analytics(
         top_pages=top_pages,
         assignment_modes=assignment_modes,
         recent_events=recent_event_cards,
+        recent_users=recent_users,
     )

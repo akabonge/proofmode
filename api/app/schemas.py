@@ -141,6 +141,7 @@ class AnalyticsEventCreate(BaseModel):
 class AnalyticsKpiOut(BaseModel):
     total_users: int
     new_users_7d: int
+    active_users_7d: int
     total_submissions: int
     total_checkpoints: int
     shared_proofs: int
@@ -182,6 +183,16 @@ class AnalyticsRecentEventOut(BaseModel):
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
+class AnalyticsUserOverviewOut(BaseModel):
+    email: EmailStr
+    role: str
+    created_at: datetime
+    last_seen_at: Optional[datetime] = None
+    submissions_created: int = 0
+    checkpoints_captured: int = 0
+    is_recently_active: bool = False
+
+
 class AnalyticsDashboardOut(BaseModel):
     generated_at: datetime
     kpis: AnalyticsKpiOut
@@ -190,3 +201,4 @@ class AnalyticsDashboardOut(BaseModel):
     top_pages: list[AnalyticsPageViewOut]
     assignment_modes: list[AnalyticsAssignmentModeOut]
     recent_events: list[AnalyticsRecentEventOut]
+    recent_users: list[AnalyticsUserOverviewOut]
